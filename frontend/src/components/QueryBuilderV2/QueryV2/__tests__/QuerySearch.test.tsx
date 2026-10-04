@@ -1,3 +1,4 @@
+import { completionStatus, startCompletion } from '@codemirror/autocomplete';
 import { EditorView } from '@uiw/react-codemirror';
 import { getFieldKeySuggestions } from 'api/querySuggestions/getFieldKeySuggestions';
 import { getFieldValueSuggestions } from 'api/querySuggestions/getFieldValueSuggestions';
@@ -158,11 +159,22 @@ describe('QuerySearch (Integration with Real CodeMirror)', () => {
 					timeout: 2000,
 				});
 
-				// the string and number values off the response both reach the dropdown
-				await expect(
-					screen.findByText('payment-service'),
-				).resolves.toBeInTheDocument();
-				await expect(screen.findByText('200')).resolves.toBeInTheDocument();
+				// Typing and async fetches can close the popup before its next render.
+				// Request completion again, as in the recent-search integration tests.
+				await waitFor(
+					() => {
+						const root = document.querySelector('.cm-editor') as HTMLElement;
+						const view = EditorView.findFromDOM(root);
+						expect(view).toBeDefined();
+						if (view && completionStatus(view.state) === null) {
+							startCompletion(view);
+						}
+						// Both value types must still reach the real dropdown.
+						expect(screen.getByText('payment-service')).toBeInTheDocument();
+						expect(screen.getByText('200')).toBeInTheDocument();
+					},
+					{ timeout: 3000 },
+				);
 			},
 		);
 	});
