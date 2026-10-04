@@ -2,17 +2,28 @@ name: postci
 
 on:
   pull_request_target:
-    branches:
-      - main
-    types:
-      - synchronize
+    branches: [main]
+    types: [synchronize]
+
+permissions:
+  pull-requests: write
 
 jobs:
   remove:
     if: github.event.pull_request.head.repo.fork || github.event.pull_request.user.login == 'dependabot[bot]'
-    uses: signoz/primus.workflows/.github/workflows/github-label.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      GITHUB_LABEL_ACTION: remove
-      GITHUB_LABEL_NAME: safe-to-test
+    runs-on: ubuntu-24.04
+    steps:
+      # Only trusted event metadata is used; never check out a fork's code.
+      - uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7
+        with:
+          script: |
+            try {
+              await github.rest.issues.removeLabel({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                name: 'safe-to-test'
+              });
+            } catch (error) {
+              if (error.status !== 404) throw error;
+            }
