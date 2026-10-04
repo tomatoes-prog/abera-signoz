@@ -1,0 +1,13 @@
+<functions>
+  <function>
+    <type>executable</type>
+    <name>histogramQuantile</name>
+    <return_type>Float64</return_type>
+    <argument><type>Array(Float64)</type></argument>
+    <argument><type>Array(Float64)</type></argument>
+    <argument><type>Float64</type></argument>
+    <format>CSV</format>
+    <command>histogramQuantile</command>
+    <command_termination_timeout>5</command_termination_timeout>
+  </function>
+</functions>

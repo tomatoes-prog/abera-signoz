@@ -1,5 +1,7 @@
 package sqlmigration
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"context"
 	"database/sql"
@@ -50,14 +52,14 @@ func (migration *queryBuilderV5Migration) Register(migrations *migrate.Migration
 }
 
 func (migration *queryBuilderV5Migration) getTraceDuplicateKeys(ctx context.Context) ([]string, error) {
-	query := `
+	query := aberanamespace.Resolve(`
 		SELECT tagKey
 		FROM signoz_traces.distributed_span_attributes_keys
 		WHERE tagType IN ('tag', 'resource')
 		GROUP BY tagKey
 		HAVING COUNT(DISTINCT tagType) > 1
 		ORDER BY tagKey
-	`
+	`)
 
 	rows, err := migration.telemetryStore.ClickhouseDB().Query(ctx, query)
 	if err != nil {
@@ -80,7 +82,7 @@ func (migration *queryBuilderV5Migration) getTraceDuplicateKeys(ctx context.Cont
 }
 
 func (migration *queryBuilderV5Migration) getLogDuplicateKeys(ctx context.Context) ([]string, error) {
-	query := `
+	query := aberanamespace.Resolve(`
 		SELECT name
 		FROM (
 			SELECT DISTINCT name FROM signoz_logs.distributed_logs_attribute_keys
@@ -88,7 +90,7 @@ func (migration *queryBuilderV5Migration) getLogDuplicateKeys(ctx context.Contex
 			SELECT DISTINCT name FROM signoz_logs.distributed_logs_resource_keys
 		)
 		ORDER BY name
-	`
+	`)
 
 	rows, err := migration.telemetryStore.ClickhouseDB().Query(ctx, query)
 	if err != nil {

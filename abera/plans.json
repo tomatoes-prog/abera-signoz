@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "currency": "COP",
+  "cycleDays": 31,
+  "plans": {
+    "lite": {
+      "priceBeforeTax": 89900,
+      "logTraceBytes": 10000000000,
+      "metricSamples": 25000000,
+      "activeSeries": 1000,
+      "ingestBytesPerSecond": 65536,
+      "burstBytes": 4194304,
+      "storageBytes": 10737418240,
+      "retentionDays": 7,
+      "backupIntervalHours": 24
+    },
+    "essential": {
+      "priceBeforeTax": 129900,
+      "logTraceBytes": 30000000000,
+      "metricSamples": 75000000,
+      "activeSeries": 3000,
+      "ingestBytesPerSecond": 131072,
+      "burstBytes": 4194304,
+      "storageBytes": 26843545600,
+      "retentionDays": 15,
+      "backupIntervalHours": 6
+    }
+  },
+  "deferredPlans": ["pro"]
+}

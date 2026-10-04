@@ -1,9 +1,10 @@
 package telemetrymetadata
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import otelconst "github.com/SigNoz/signoz-otel-collector/constants"
 
 const (
-	DBName                           = "signoz_metadata"
 	AttributesMetadataTableName      = "distributed_attributes_metadata"
 	AttributesMetadataLocalTableName = "attributes_metadata"
 	ColumnEvolutionMetadataTableName = "distributed_column_evolution_metadata"
@@ -12,3 +13,5 @@ const (
 	PromotedPathsTableName = "distributed_column_evolution_metadata"
 	SkipIndexTableName     = "system.data_skipping_indices"
 )
+
+var DBName = aberanamespace.Resolve("signoz_metadata")

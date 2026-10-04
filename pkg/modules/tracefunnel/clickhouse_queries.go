@@ -1,5 +1,7 @@
 package tracefunnel
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"fmt"
 	"strings"
@@ -50,7 +52,7 @@ func BuildFunnelValidationQuery(
 		whereConditions = append(whereConditions, fmt.Sprintf("(%s)", strings.Join(orConditions, " OR ")))
 	}
 
-	queryTemplate := `
+	queryTemplate := aberanamespace.Resolve(`
 WITH
     %s
 
@@ -66,7 +68,7 @@ FROM (
     HAVING t1_time > 0
 )
 ORDER BY t1_time
-LIMIT 5;`
+LIMIT 5;`)
 
 	return fmt.Sprintf(queryTemplate,
 		strings.Join(withParts, ",\n    "),
@@ -177,7 +179,7 @@ func BuildFunnelOverviewQuery(
 		errorAgg = append(errorAgg, fmt.Sprintf("sum_s%d_error", i+1))
 	}
 
-	queryTemplate := `
+	queryTemplate := aberanamespace.Resolve(`
 WITH
     %s
 
@@ -204,7 +206,7 @@ SELECT
     avg_duration,
     latency
 FROM totals;
-`
+`)
 
 	return fmt.Sprintf(queryTemplate,
 		strings.Join(withParts, ",\n    "),
@@ -290,7 +292,7 @@ func BuildFunnelCountQuery(
 		}
 	}
 
-	queryTemplate := `
+	queryTemplate := aberanamespace.Resolve(`
 WITH
     %s
 
@@ -305,7 +307,7 @@ FROM (
     GROUP BY trace_id
     HAVING t1_time > 0
 ) AS funnel;
-`
+`)
 
 	return fmt.Sprintf(queryTemplate,
 		strings.Join(withParts, ",\n    "),
@@ -404,7 +406,7 @@ func BuildFunnelStepOverviewQuery(
 	conversionCondition := strings.Join(conversionConditions, " AND ")
 
 	// Build the query for step transition
-	queryTemplate := `
+	queryTemplate := aberanamespace.Resolve(`
 WITH
     %s
 
@@ -440,7 +442,7 @@ FROM (
         HAVING t%d_time > 0
     ) AS funnel
 ) AS totals;
-`
+`)
 
 	return fmt.Sprintf(queryTemplate,
 		strings.Join(withParts, ",\n    "),
@@ -488,7 +490,7 @@ func BuildFunnelTopSlowTracesQuery(
 		t2TimeExpr = "minIf(timestamp, resource_string_service$$name = step2.1 AND name = step2.2) + toIntervalNanosecond(minIf(duration_nano, resource_string_service$$name = step2.1 AND name = step2.2))"
 	}
 
-	queryTemplate := `
+	queryTemplate := aberanamespace.Resolve(`
 WITH
     %[1]d AS contains_error_t1,
     %[2]d AS contains_error_t2,
@@ -521,7 +523,7 @@ FROM (
 ) AS funnel
 ORDER BY duration_ms DESC
 LIMIT 5;
-`
+`)
 	return fmt.Sprintf(queryTemplate,
 		containsErrorT1,
 		containsErrorT2,
@@ -564,7 +566,7 @@ func BuildFunnelTopSlowErrorTracesQuery(
 		t2TimeExpr = "minIf(timestamp, resource_string_service$$name = step2.1 AND name = step2.2) + toIntervalNanosecond(minIf(duration_nano, resource_string_service$$name = step2.1 AND name = step2.2))"
 	}
 
-	queryTemplate := `
+	queryTemplate := aberanamespace.Resolve(`
 WITH
     %[1]d AS contains_error_t1,
     %[2]d AS contains_error_t2,
@@ -601,7 +603,7 @@ WHERE
     (t1_error = 1 OR t2_error = 1)
 ORDER BY duration_ms DESC
 LIMIT 5;
-`
+`)
 	return fmt.Sprintf(queryTemplate,
 		containsErrorT1,
 		containsErrorT2,

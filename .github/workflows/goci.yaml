@@ -2,173 +2,53 @@ name: goci
 
 on:
   pull_request:
-    branches:
-      - main
-  pull_request_target:
-    types:
-      - labeled
+    branches: [main]
   merge_group:
-    types:
-      - checks_requested
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-go-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  test:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/go-test.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      GO_TEST_CONTEXT: ./...
-      GO_VERSION: 1.24
-  fmt:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/go-fmt.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      GO_VERSION: 1.24
-  lint:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/go-lint.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      GO_VERSION: 1.24
-  deps:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/go-deps.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      GO_VERSION: 1.24
-  semconv-generated:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
+  community:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GOMEMLIMIT: 3GiB
+      GOMAXPROCS: '2'
     steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: go-install
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version: "1.24"
-      - name: check-semconv-generated-files
+          go-version: '1.25.7'
+      # Run directly: upstream Primus requires SigNoz's private GitHub app.
+      - name: Check Go formatting
+        shell: bash
+        run: |
+          mapfile -t unformatted < <(gofmt -l pkg cmd/community cmd/abera-gateway abera/tools/namespace-go)
+          if [ "${#unformatted[@]}" -ne 0 ]; then
+            printf '%s\n' "${unformatted[@]}"
+            exit 1
+          fi
+      - name: Check Community dependency graph
+        shell: bash
+        run: |
+          go list -deps ./cmd/community > /tmp/community-dependencies.txt
+          if grep -E '^github.com/SigNoz/signoz/(ee|cmd/enterprise)(/|$)' /tmp/community-dependencies.txt; then
+            exit 1
+          fi
+      - name: Community unit tests and vet
+        run: go test -p 2 ./pkg/... ./cmd/community/... ./cmd/abera-gateway/... ./abera/tools/namespace-go
+      - name: Check generated semantic conventions
         run: make semconv-check
-  build:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
-    steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: go-install
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-      - name: qemu-install
-        uses: docker/setup-qemu-action@v3
-      - name: aarch64-install
+      - name: Build Community and gateway
+        env:
+          CGO_ENABLED: '0'
         run: |
-          set -ex
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu musl-tools
-      - name: node-install
-        uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-      - name: setup-pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10
-      - name: docker-community
-        shell: bash
-        run: |
-          make docker-build-community
-      - name: docker-enterprise
-        shell: bash
-        run: |
-          make docker-build-enterprise
-  openapi:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
-    steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: go-install
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-      - name: generate-openapi
-        run: |
-          go run cmd/enterprise/*.go generate openapi
-          git diff --compact-summary --exit-code || (echo; echo "Unexpected difference in openapi spec. Run go run cmd/enterprise/*.go generate openapi locally and commit."; exit 1)
-  authz:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
-    steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: go-install
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-      - name: generate-authz
-        run: |
-          go run cmd/enterprise/*.go generate authz
-          git diff --compact-summary --exit-code || (echo; echo "Unexpected difference in authz permissions. Run go run cmd/enterprise/*.go generate authz locally and commit."; exit 1)
-  web-settings:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
-    steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: go-install
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-      - name: generate-web-settings
-        run: |
-          go run cmd/enterprise/*.go generate config web-settings
-          git diff --compact-summary --exit-code || (echo; echo "Unexpected difference in web settings schema. Run go run cmd/enterprise/*.go generate config web-settings locally and commit."; exit 1)
-  transaction-groups:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
-    steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: go-install
-        uses: actions/setup-go@v5
-        with:
-          go-version: "1.24"
-      - name: generate-transaction-groups
-        run: |
-          go run cmd/enterprise/*.go generate config transaction-groups
-          git diff --compact-summary --exit-code || (echo; echo "Unexpected difference in transaction groups schema. Run go run cmd/enterprise/*.go generate config transaction-groups locally and commit."; exit 1)
+          mkdir -p dist
+          go build -p 2 -trimpath -tags timetzdata -o dist/signoz ./cmd/community
+          go build -p 2 -trimpath -o dist/abera-gateway ./cmd/abera-gateway

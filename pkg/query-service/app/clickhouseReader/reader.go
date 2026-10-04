@@ -1,5 +1,7 @@
 package clickhouseReader
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"context"
 	"database/sql"
@@ -59,10 +61,9 @@ import (
 )
 
 const (
-	primaryNamespace          = "clickhouse"
-	archiveNamespace          = "clickhouse-archive"
-	signozTraceDBName         = "signoz_traces"
-	signozHistoryDBName       = "signoz_analytics"
+	primaryNamespace = "clickhouse"
+	archiveNamespace = "clickhouse-archive"
+
 	ruleStateHistoryTableName = "distributed_rule_state_history_v0"
 	signozDurationMVTable     = "distributed_durationSort"
 	signozUsageExplorerTable  = "distributed_usage_explorer"
@@ -70,10 +71,8 @@ const (
 	signozErrorIndexTable     = "distributed_signoz_error_index_v2"
 	signozTraceTableName      = "distributed_signoz_index_v2"
 	signozTraceLocalTableName = "signoz_index_v2"
-	signozMetricDBName        = "signoz_metrics"
-	signozMetadataDbName      = "signoz_metadata"
-	signozMeterDBName         = "signoz_meter"
-	signozMeterSamplesName    = "samples_agg_1d"
+
+	signozMeterSamplesName = "samples_agg_1d"
 
 	signozSampleLocalTableName = "samples_v4"
 	signozSampleTableName      = "distributed_samples_v4"
@@ -112,6 +111,15 @@ const (
 	charset                                = "abcdefghijklmnopqrstuvwxyz" +
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	NANOSECOND = 1000000000
+)
+
+var (
+	signozTraceDBName   = aberanamespace.Resolve("signoz_traces")
+	signozHistoryDBName = aberanamespace.Resolve("signoz_analytics")
+
+	signozMetricDBName   = aberanamespace.Resolve("signoz_metrics")
+	signozMetadataDbName = aberanamespace.Resolve("signoz_metadata")
+	signozMeterDBName    = aberanamespace.Resolve("signoz_meter")
 )
 
 var (

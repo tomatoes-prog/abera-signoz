@@ -1,5 +1,7 @@
 package spantypes
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"encoding/json"
 	"fmt"
@@ -13,10 +15,12 @@ import (
 
 const (
 	// ClickHouse database and table names for trace queries.
-	TraceDB           = "signoz_traces"
+
 	TraceTable        = "distributed_signoz_index_v3"
 	TraceSummaryTable = "distributed_trace_summary"
 )
+
+var TraceDB = aberanamespace.Resolve("signoz_traces")
 
 // ErrTraceNotFound is returned when a trace ID has no matching spans in ClickHouse.
 var ErrTraceNotFound = errors.NewNotFoundf(errors.CodeNotFound, "trace not found")

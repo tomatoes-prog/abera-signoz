@@ -1,0 +1,10 @@
+# syntax=docker/dockerfile:1.7
+FROM --platform=$BUILDPLATFORM golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1 AS udf
+WORKDIR /src
+COPY scripts/clickhouse/histogramquantile/main.go .
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH go build -trimpath -ldflags '-s -w' -o /out/histogramQuantile main.go
+FROM clickhouse/clickhouse-server:25.12.5@sha256:cacf32d6884291dc2ff5e0156a97f46fc53ff7c929a7906d114e268a929dfd3a
+COPY --from=udf --chmod=0555 /out/histogramQuantile /var/lib/clickhouse/user_scripts/histogramQuantile
+COPY abera/docker/functions.xml /etc/clickhouse-server/abera-functions.xml
+COPY LICENSE /usr/share/licenses/abera-signoz/LICENSE

@@ -1,3 +1,4 @@
+import { completionStatus, startCompletion } from '@codemirror/autocomplete';
 import { EditorView } from '@uiw/react-codemirror';
 import { getFieldKeySuggestions } from 'api/querySuggestions/getFieldKeySuggestions';
 import { getFieldValueSuggestions } from 'api/querySuggestions/getFieldValueSuggestions';
@@ -119,47 +120,63 @@ describe('QuerySearch (Integration with Real CodeMirror)', () => {
 			typeof getFieldValueSuggestions
 		>;
 		mockedGetValues.mockClear();
-		mockedGetValues.mockResolvedValueOnce({
-			status: 'success',
-			data: {
-				complete: true,
-				values: {
-					stringValues: ['payment-service'],
-					numberValues: [200],
-					boolValues: [],
-					relatedValues: [],
-				},
+		// Keep this response stable across debounced requests, then restore the default.
+		await mockedGetValues.withImplementation(
+			() =>
+				Promise.resolve({
+					status: 'success',
+					data: {
+						complete: true,
+						values: {
+							stringValues: ['payment-service'],
+							numberValues: [200],
+							boolValues: [],
+							relatedValues: [],
+						},
+					},
+				}),
+			async () => {
+				render(
+					<QuerySearch
+						onChange={jest.fn() as jest.MockedFunction<(v: string) => void>}
+						queryData={initialQueriesMap.logs.builder.queryData[0]}
+						dataSource={DataSource.LOGS}
+					/>,
+				);
+
+				// Wait for CodeMirror to initialize
+				await waitFor(() => {
+					const editor = document.querySelector(CM_EDITOR_SELECTOR);
+					expect(editor).toBeInTheDocument();
+				});
+
+				const editor = document.querySelector(CM_EDITOR_SELECTOR) as HTMLElement;
+				await userEvent.click(editor);
+				await userEvent.type(editor, SAMPLE_VALUE_TYPING_INCOMPLETE);
+
+				// Wait for debounced API call (300ms debounce + some buffer)
+				await waitFor(() => expect(mockedGetValues).toHaveBeenCalled(), {
+					timeout: 2000,
+				});
+
+				// Typing and async fetches can close the popup before its next render.
+				// Request completion again, as in the recent-search integration tests.
+				await waitFor(
+					() => {
+						const root = document.querySelector('.cm-editor') as HTMLElement;
+						const view = EditorView.findFromDOM(root);
+						expect(view).toBeDefined();
+						if (view && completionStatus(view.state) === null) {
+							startCompletion(view);
+						}
+						// Both value types must still reach the real dropdown.
+						expect(screen.getByText('payment-service')).toBeInTheDocument();
+						expect(screen.getByText('200')).toBeInTheDocument();
+					},
+					{ timeout: 3000 },
+				);
 			},
-		});
-
-		render(
-			<QuerySearch
-				onChange={jest.fn() as jest.MockedFunction<(v: string) => void>}
-				queryData={initialQueriesMap.logs.builder.queryData[0]}
-				dataSource={DataSource.LOGS}
-			/>,
 		);
-
-		// Wait for CodeMirror to initialize
-		await waitFor(() => {
-			const editor = document.querySelector(CM_EDITOR_SELECTOR);
-			expect(editor).toBeInTheDocument();
-		});
-
-		const editor = document.querySelector(CM_EDITOR_SELECTOR) as HTMLElement;
-		await userEvent.click(editor);
-		await userEvent.type(editor, SAMPLE_VALUE_TYPING_INCOMPLETE);
-
-		// Wait for debounced API call (300ms debounce + some buffer)
-		await waitFor(() => expect(mockedGetValues).toHaveBeenCalled(), {
-			timeout: 2000,
-		});
-
-		// the string and number values off the response both reach the dropdown
-		await expect(
-			screen.findByText('payment-service'),
-		).resolves.toBeInTheDocument();
-		await expect(screen.findByText('200')).resolves.toBeInTheDocument();
 	});
 
 	it('fetches key suggestions on mount for LOGS', async () => {

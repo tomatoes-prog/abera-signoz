@@ -1,0 +1,45 @@
+# Shared defaults; tenant identities, DSNs and secrets come from the operator.
+analytics:
+  enabled: false
+statsreporter:
+  enabled: false
+serviceaccount:
+  analytics:
+    enabled: false
+pprof:
+  enabled: false
+cache:
+  provider: memory
+  memory:
+    num_counters: 10000
+    max_cost: 16777216
+sqlstore:
+  provider: sqlite
+  max_open_conns: 4
+  sqlite:
+    path: /var/lib/signoz/signoz.db
+    mode: wal
+    busy_timeout: 10s
+    transaction_mode: immediate
+telemetrystore:
+  max_open_conns: 8
+  max_idle_conns: 2
+  dial_timeout: 5s
+  clickhouse:
+    settings:
+      max_execution_time: 15
+      max_execution_time_leaf: 15
+      max_result_rows: 100000
+querier:
+  max_concurrent_queries: 2
+prometheus:
+  timeout: 15s
+  active_query_tracker:
+    path: /var/lib/signoz
+    max_concurrent: 2
+tokenizer:
+  provider: opaque
+user:
+  password:
+    reset:
+      allow_self: true

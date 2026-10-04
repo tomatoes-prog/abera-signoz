@@ -1,5 +1,7 @@
 package implrulestatehistory
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"context"
 	"fmt"
@@ -18,9 +20,10 @@ import (
 )
 
 const (
-	signozHistoryDBName       = "signoz_analytics"
 	ruleStateHistoryTableName = "distributed_rule_state_history_v0"
 )
+
+var signozHistoryDBName = aberanamespace.Resolve("signoz_analytics")
 
 type store struct {
 	telemetryStore         telemetrystore.TelemetryStore

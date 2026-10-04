@@ -2,133 +2,47 @@ name: jsci
 
 on:
   pull_request:
-    branches:
-      - main
-  pull_request_target:
-    types:
-      - labeled
+    branches: [main]
   merge_group:
-    types:
-      - checks_requested
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-web-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  tsc:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/js-tsc.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      JS_SRC: frontend
-      JS_PKG_MANAGER: pnpm
-  test:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/js-test.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      JS_SRC: frontend
-      JS_PKG_MANAGER: pnpm
-  fmt:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/js-fmt.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      JS_SRC: frontend
-      JS_PKG_MANAGER: pnpm
-  lint:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    uses: signoz/primus.workflows/.github/workflows/js-lint.yaml@main
-    secrets: inherit
-    with:
-      PRIMUS_REF: main
-      JS_SRC: frontend
-      JS_PKG_MANAGER: pnpm
-  openapi:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
+  frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      CI: 'true'
+      COREPACK_ENABLE_AUTO_PIN: '0'
+      NODE_OPTIONS: --max-old-space-size=4096
     steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: node-install
-        uses: actions/setup-node@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
         with:
-          node-version: "22"
-      - name: install-pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10
-      - name: install-frontend
-        run: cd frontend && pnpm install
-      - name: generate-api-clients
-        run: |
-          cd frontend && pnpm generate:api
-          git diff --compact-summary --exit-code || (echo; echo "Unexpected difference in generated api clients. Run pnpm generate:api in frontend/ locally and commit."; exit 1)
-  storybook:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    container:
-      image: mcr.microsoft.com/playwright:v1.57.0-noble
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3, 4]
-    steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: install-pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10
-      - name: node-install
-        uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-          cache: pnpm
-          cache-dependency-path: frontend/pnpm-lock.yaml
-      - name: install-frontend
-        run: cd frontend && pnpm install
-      - name: test-storybook
-        run: cd frontend && pnpm test:storybook --shard=${{ matrix.shard }}/${{ strategy.job-total }}
-  web-settings:
-    if: |
-      github.event_name == 'merge_group' ||
-      (github.event_name == 'pull_request' && ! github.event.pull_request.head.repo.fork && github.event.pull_request.user.login != 'dependabot[bot]' && ! contains(github.event.pull_request.labels.*.name, 'safe-to-test')) ||
-      (github.event_name == 'pull_request_target' && contains(github.event.pull_request.labels.*.name, 'safe-to-test'))
-    runs-on: ubuntu-latest
-    steps:
-      - name: self-checkout
-        uses: actions/checkout@v4
-      - name: node-install
-        uses: actions/setup-node@v5
-        with:
-          node-version: "22"
-      - name: install-pnpm
-        uses: pnpm/action-setup@v6
-        with:
-          version: 10
-      - name: install-frontend
-        run: cd frontend && pnpm install
-      - name: generate-web-settings
-        run: |
-          cd frontend && pnpm generate:config:web-settings
-          git diff --compact-summary --exit-code || (echo; echo "Unexpected difference in generated web settings types. Run pnpm generate:config:web-settings in frontend/ locally and commit."; exit 1)
+          node-version: '22'
+      # Match the public toolchain used by the Community Dockerfile.
+      - name: Install pnpm
+        run: corepack enable && corepack prepare pnpm@10.11.0 --activate
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Check types
+        run: pnpm exec tsgo --noEmit
+      - name: Check formatting
+        run: pnpm fmt
+      - name: Lint
+        run: pnpm lint
+      - name: Unit tests
+        run: pnpm test --ci --runInBand
+      - name: Plugin tests
+        run: pnpm test:plugins
+      - name: Build frontend
+        run: pnpm build

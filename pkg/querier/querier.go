@@ -1,5 +1,7 @@
 package querier
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"context"
 	"fmt"
@@ -340,9 +342,9 @@ func (q *querier) populateQBEvent(event *qbtypes.QBEvent, queries []qbtypes.Quer
 		case qbtypes.QueryTypeClickHouseSQL:
 			sql := query.GetQuery()
 			if strings.TrimSpace(sql) != "" {
-				event.MetricsUsed = strings.Contains(sql, "signoz_metrics")
-				event.LogsUsed = strings.Contains(sql, "signoz_logs")
-				event.TracesUsed = strings.Contains(sql, "signoz_traces")
+				event.MetricsUsed = strings.Contains(sql, aberanamespace.Resolve("signoz_metrics"))
+				event.LogsUsed = strings.Contains(sql, aberanamespace.Resolve("signoz_logs"))
+				event.TracesUsed = strings.Contains(sql, aberanamespace.Resolve("signoz_traces"))
 			}
 		}
 	}

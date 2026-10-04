@@ -1,5 +1,7 @@
 package metertelemetryschema
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"time"
 
@@ -8,12 +10,13 @@ import (
 )
 
 const (
-	DBName                     = "signoz_meter"
 	SamplesTableName           = "distributed_samples"
 	SamplesLocalTableName      = "samples"
 	SamplesAgg1dTableName      = "distributed_samples_agg_1d"
 	SamplesAgg1dLocalTableName = "samples_agg_1d"
 )
+
+var DBName = aberanamespace.Resolve("signoz_meter")
 
 var (
 	oneMonthInMilliseconds = uint64(time.Hour.Milliseconds() * 24 * 30)

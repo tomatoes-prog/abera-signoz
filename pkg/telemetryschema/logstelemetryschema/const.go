@@ -1,5 +1,7 @@
 package logstelemetryschema
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"github.com/SigNoz/signoz-otel-collector/constants"
 	qbtypes "github.com/SigNoz/signoz/pkg/types/querybuildertypes/querybuildertypesv5"
@@ -135,7 +137,6 @@ var (
 )
 
 const (
-	DBName                        = "signoz_logs"
 	LogsV2TableName               = "distributed_logs_v2"
 	LogsV2LocalTableName          = "logs_v2"
 	TagAttributesV2TableName      = "distributed_tag_attributes_v2"
@@ -147,3 +148,5 @@ const (
 	PromotedPathsTableName        = "distributed_json_promoted_paths"
 	SkipIndexTableName            = "system.data_skipping_indices"
 )
+
+var DBName = aberanamespace.Resolve("signoz_logs")

@@ -1,0 +1,29 @@
+{
+  "schemaVersion": 1,
+  "productId": "abera-signoz",
+  "version": "0.1.0",
+  "upstreamCommit": "0aeef0dc46daf507778c95cbcb35b8791f94457b",
+  "edition": "community",
+  "maxCustomersPerHost": 4,
+  "maxHosts": 1,
+  "productionEnabled": false,
+  "images": {
+    "clickhouse": "clickhouse/clickhouse-server:25.12.5@sha256:cacf32d6884291dc2ff5e0156a97f46fc53ff7c929a7906d114e268a929dfd3a",
+    "keeper": "clickhouse/clickhouse-keeper:25.12.5@sha256:525b8b0f93ccb371131c46f22a066ea43d33d74aba314203e8044609945d8524",
+    "collector": "signoz/signoz-otel-collector:v0.144.6@sha256:7e4e539a73f1f88fbc1cd7e659ab3950908e83ce1f2a37a297452f910d072174"
+  },
+  "economics": {
+    "region": "us-east-2",
+    "instanceType": "r7g.medium",
+    "dataVolumeGiB": 192,
+    "rootVolumeGiB": 8,
+    "ec2UsdPerHour": "0.0536",
+    "ebsUsdPerGiBMonth": "0.08",
+    "ipv4UsdPerHour": "0.005",
+    "copPerUsdScenario": "4000",
+    "newInfrastructureTargetCop": 260000,
+    "pilotCeilingCop": 450000,
+    "minimumOperatingMargin": "0.15",
+    "pricingCheckedOn": "2026-10-02"
+  }
+}
