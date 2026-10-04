@@ -18,7 +18,10 @@ def terms(plan="lite"):
     return [{"cycleId": "paid-1", "startsAt": now-10, "endsAt": now+10000, "plan": plan}]
 
 
-def test_render_four_separate_namespaces_secrets_networks_and_data_clusters(tmp_path):
+def test_render_four_separate_namespaces_secrets_networks_and_data_clusters(tmp_path, monkeypatch):
+    # This unit test checks generated isolation settings; assigning Linux file
+    # owners is a privileged host operation exercised by the DEV acceptance run.
+    monkeypatch.setattr("os.chown", lambda *_: None, raising=False)
     state = {"masterPassword": "operator-secret", "disabledDefaultPassword": "disabled", "tenants": [
         new_tenant(f"tenant-{slot}", f"admin-{slot}@example.test", "lite", slot, terms(), 1) for slot in range(1,5)]}
     output = read_json(render(tmp_path, state))

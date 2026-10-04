@@ -6,6 +6,8 @@ Las plantillas solo admiten `Environment=dev`. `EnablePilot=false` evita crear l
 
 La cuenta DEV comprobada es `374786578563`, región `us-east-2`. El cambio de permisos de `abera-dev-security-seed` terminó en `UPDATE_COMPLETE` el 4 de octubre de 2026; la plantilla aplicada conserva la delegación de Chatwoot. La foundation, las imágenes ECR, el host y la actualización de core/Billing siguen pendientes. El catálogo remoto todavía no se modificó.
 
+Los workflows `goci` y `jsci` ejecutan directamente las pruebas y compilaciones de Community con Go 1.25.7, Node 22 y pnpm 10.11.0. Incluyen formato, tipos, lint, pruebas y la comprobación de que el backend Community no importa Enterprise. Los workflows heredados requerían una aplicación privada y acceso a `SigNoz/primus`; esa dependencia se reemplazó por las herramientas públicas del repositorio. La validación de Abera también comprueba el parche de namespaces y sus pruebas de operación.
+
 ## Publicación desde los repositorios
 
 1. Revisar los cambios de los tres repositorios y ejecutar sus pruebas. Publicar primero la extensión compatible del control plane y Billing. La política del producto anterior no cambia cuando no declara `usagePolicy`/`capacityPolicy`.
