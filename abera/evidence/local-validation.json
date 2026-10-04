@@ -1,0 +1,132 @@
+{
+  "recordedAt": "2026-10-03T05:30:00.991911+00:00",
+  "environment": "Docker Desktop Linux/x86_64, four synthetic tenants, all product containers pinned to CPU 0",
+  "awsIntegrationVerified": false,
+  "armCapacityCertified": false,
+  "tests": {
+    "signozPython": 17,
+    "automationsPython": 377,
+    "billingPython": 592,
+    "goPackages": [
+      "pkg/abera/gateway",
+      "pkg/abera/namespace",
+      "pkg/abera/querylimits",
+      "abera/tools/namespace-go"
+    ],
+    "cloudFormationLint": "foundation.yaml and subscription.yaml passed"
+  },
+  "benchmark": {
+    "startedAt": 1791003759,
+    "durationSeconds": 180.0,
+    "customers": 4,
+    "cpuPinned": true,
+    "architecture": "x86_64",
+    "rounds": 36,
+    "drained": true,
+    "ingestLatencyMs": {
+      "count": 432,
+      "p95": 61.99999999807915,
+      "max": 93.0000000007567
+    },
+    "queryLatencyMs": {
+      "count": 144,
+      "p95": 281.9999999992433,
+      "max": 375.0
+    },
+    "errors": [],
+    "result": "PASS",
+    "peakSampledContainerMemoryMiB": 728.24,
+    "deliveredRows": {
+      "logs": 7200,
+      "traces": 1440,
+      "metrics": 5760
+    },
+    "oomKilled": false,
+    "restarts": 0
+  },
+  "smoke": {
+    "result": "PASS",
+    "at": 1791004397,
+    "ingestion": [
+      {
+        "slot": 1,
+        "signal": "logs",
+        "rows": 1
+      },
+      {
+        "slot": 1,
+        "signal": "traces",
+        "rows": 1
+      },
+      {
+        "slot": 1,
+        "signal": "metrics",
+        "rows": 1
+      },
+      {
+        "slot": 2,
+        "signal": "logs",
+        "rows": 1
+      },
+      {
+        "slot": 2,
+        "signal": "traces",
+        "rows": 1
+      },
+      {
+        "slot": 2,
+        "signal": "metrics",
+        "rows": 1
+      },
+      {
+        "slot": 3,
+        "signal": "logs",
+        "rows": 1
+      },
+      {
+        "slot": 3,
+        "signal": "traces",
+        "rows": 1
+      },
+      {
+        "slot": 3,
+        "signal": "metrics",
+        "rows": 1
+      },
+      {
+        "slot": 4,
+        "signal": "logs",
+        "rows": 1
+      },
+      {
+        "slot": 4,
+        "signal": "traces",
+        "rows": 1
+      },
+      {
+        "slot": 4,
+        "signal": "metrics",
+        "rows": 1
+      }
+    ],
+    "foreignTokensRejected": 4,
+    "databaseIsolation": {
+      "checks": 32,
+      "customers": 4,
+      "result": "PASS"
+    }
+  },
+  "lifecycle": {
+    "result": "PASS",
+    "archivedTables": 55,
+    "runtimeRemovedBeforeRecovery": true,
+    "usagePreserved": true,
+    "customersAfterRecovery": 4,
+    "s3": "local fixture; AWS integration still required"
+  },
+  "privateReportSha256": {
+    "benchmark": "05bf4214d50b1ebed33480de21fb3c08ca405fcc49903abb6efbba09b47dfbfd",
+    "smoke": "756bef2dc39e08f50ab464a35edd712615291dd3207171098ed01421bf6123bd",
+    "lifecycle": "2bee12d5ef18ab6c2733b7cc9b0af6ab0c44f397e5fec42d0fcc79d64313832c"
+  }
+}

@@ -152,7 +152,7 @@ func (r *ClickHouseReader) getValuesForLogAttributes(
 					)
 					limit 2
 				)
-			) settings max_threads=2
+			) settings max_threads=1
 		```
 		Since tag_attributes table uses ReplacingMergeTree, the values would be distinct and no order by
 		is being used to ensure the `limit` clause minimizes the amount of data scanned.
@@ -180,7 +180,7 @@ func (r *ClickHouseReader) getValuesForLogAttributes(
 
 	query := fmt.Sprintf(`select * from (
 		%s
-	) settings max_threads=2`, strings.Join(tagQueries, " UNION DISTINCT "))
+	) settings max_threads=1`, strings.Join(tagQueries, " UNION DISTINCT "))
 
 	rows, err := r.db.Query(ctx, query, tagKeyQueryArgs...)
 	if err != nil {

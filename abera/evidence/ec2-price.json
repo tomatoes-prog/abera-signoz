@@ -1,0 +1,22 @@
+{
+  "source": "https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/US%20East%20(Ohio)/Linux/index.json",
+  "checkedOn": "2026-10-02",
+  "matchingProducts": [
+    {
+      "rateCode": "7EKAJXB2REA57RPS.JRTCKXETXF.6YS6EN2CT7",
+      "price": "0.0536000000",
+      "Location": "US East (Ohio)",
+      "Instance Family": "Memory optimized",
+      "vCPU": "1",
+      "Instance Type": "r7g.medium",
+      "Memory": "8 GiB",
+      "Storage": "EBS only",
+      "Network Performance": "Up to 12500 Megabit",
+      "plc:OperatingSystem": "Linux",
+      "plc:InstanceFamily": "Memory Optimized",
+      "Operating System": "Linux",
+      "Pre Installed S/W": "NA",
+      "License Model": "No License required"
+    }
+  ]
+}

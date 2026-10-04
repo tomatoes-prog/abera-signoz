@@ -1,5 +1,7 @@
 package constants
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"maps"
 	"os"
@@ -82,14 +84,13 @@ var GroupByColMap = map[string]struct{}{
 }
 
 const (
-	SIGNOZ_METRIC_DBNAME                       = "signoz_metrics"
-	SIGNOZ_SAMPLES_V4_LOCAL_TABLENAME          = "samples_v4"
-	SIGNOZ_SAMPLES_V4_TABLENAME                = "distributed_samples_v4"
-	SIGNOZ_SAMPLES_V4_AGG_5M_TABLENAME         = "distributed_samples_v4_agg_5m"
-	SIGNOZ_SAMPLES_V4_AGG_30M_TABLENAME        = "distributed_samples_v4_agg_30m"
-	SIGNOZ_EXP_HISTOGRAM_TABLENAME             = "distributed_exp_hist"
-	SIGNOZ_EXP_HISTOGRAM_LOCAL_TABLENAME       = "exp_hist"
-	SIGNOZ_TRACE_DBNAME                        = "signoz_traces"
+	SIGNOZ_SAMPLES_V4_LOCAL_TABLENAME    = "samples_v4"
+	SIGNOZ_SAMPLES_V4_TABLENAME          = "distributed_samples_v4"
+	SIGNOZ_SAMPLES_V4_AGG_5M_TABLENAME   = "distributed_samples_v4_agg_5m"
+	SIGNOZ_SAMPLES_V4_AGG_30M_TABLENAME  = "distributed_samples_v4_agg_30m"
+	SIGNOZ_EXP_HISTOGRAM_TABLENAME       = "distributed_exp_hist"
+	SIGNOZ_EXP_HISTOGRAM_LOCAL_TABLENAME = "exp_hist"
+
 	SIGNOZ_SPAN_INDEX_TABLENAME                = "distributed_signoz_index_v2"
 	SIGNOZ_SPAN_INDEX_V3                       = "distributed_signoz_index_v3"
 	SIGNOZ_SPAN_INDEX_LOCAL_TABLENAME          = "signoz_index_v2"
@@ -110,7 +111,15 @@ const (
 	SIGNOZ_METADATA_LOCAL_TABLENAME            = "metadata"
 )
 
+var
+
 // alert related constants
+(
+	SIGNOZ_METRIC_DBNAME = aberanamespace.Resolve("signoz_metrics")
+
+	SIGNOZ_TRACE_DBNAME = aberanamespace.Resolve("signoz_traces")
+)
+
 const (
 	// AlertHelpPage is used in case default alert repo url is not set
 	AlertHelpPage   = "https://signoz.io/docs/alerts/"

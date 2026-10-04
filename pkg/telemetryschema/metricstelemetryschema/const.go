@@ -1,5 +1,7 @@
 package metricstelemetryschema
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"fmt"
 	"time"
@@ -10,7 +12,6 @@ import (
 )
 
 const (
-	DBName                           = "signoz_metrics"
 	UpdatedMetadataTableName         = "distributed_updated_metadata"
 	UpdatedMetadataLocalTableName    = "updated_metadata"
 	SamplesV4TableName               = "distributed_samples_v4"
@@ -47,6 +48,8 @@ const (
 
 	ReductionRulesTableName = "distributed_metric_reduction_rules"
 )
+
+var DBName = aberanamespace.Resolve("signoz_metrics")
 
 var (
 	OneHourInMilliseconds  = uint64(time.Hour.Milliseconds() * 1)

@@ -1,0 +1,87 @@
+# syntax=docker/dockerfile:1.7
+FROM --platform=$BUILDPLATFORM golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1 AS collector-source
+WORKDIR /collector
+ENV CGO_ENABLED=0 GOMEMLIMIT=3GiB GOMAXPROCS=2
+# v0.144.6: a commit, not a moving tag, determines the complete source.
+RUN git init && git remote add origin https://github.com/SigNoz/signoz-otel-collector.git && \
+    git fetch --depth 1 origin b75a6256ec153f6e095f29860f53f88c873dd268 && \
+    git checkout --detach FETCH_HEAD
+COPY abera/tools/namespace-go/main.go /patch/namespace-go.go
+COPY pkg/abera/namespace/namespace.go internal/aberanamespace/namespace.go
+COPY abera/collector/components.go.txt components/components.go
+RUN go run /patch/namespace-go.go --root /collector \
+    --module github.com/SigNoz/signoz-otel-collector \
+    --helper github.com/SigNoz/signoz-otel-collector/internal/aberanamespace
+
+FROM collector-source AS collector-build
+ARG TARGETARCH
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    GOOS=linux GOARCH=$TARGETARCH go build -p 2 -trimpath -ldflags '-s -w' -o /out/collector ./cmd/signozotelcollector && \
+    go version -m /out/collector > /out/build-modules.txt
+
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS collector
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -g 65532 signoz && adduser -D -H -u 65532 -G signoz signoz && \
+    mkdir -p /var/lib/otelcol && chown 65532:65532 /var/lib/otelcol
+COPY --from=collector-build /out/collector /signoz-otel-collector
+COPY --from=collector-build /out/build-modules.txt /usr/share/licenses/collector/build-modules.txt
+COPY --from=collector-source /collector/LICENSE /usr/share/licenses/collector/LICENSE
+USER 65532:65532
+ENTRYPOINT ["/signoz-otel-collector"]
+
+FROM --platform=$BUILDPLATFORM golang:1.25.7-bookworm@sha256:564e366a28ad1d70f460a2b97d1d299a562f08707eb0ecb24b659e5bd6c108e1 AS backend
+WORKDIR /src
+ENV CGO_ENABLED=0 GOMEMLIMIT=3GiB GOMAXPROCS=2
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go/pkg/mod go mod download
+COPY . .
+COPY --from=collector-source /collector /collector
+# SigNoz imports the collector's schema manager too. It must use the same
+# namespace patch as the ingest/migration image.
+RUN go mod edit -replace github.com/SigNoz/signoz-otel-collector=/collector
+ARG TARGETARCH
+ARG VERSION=0.1.0-dev
+ARG REVISION=unknown
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    go list -deps ./cmd/community > /tmp/community-dependencies.txt && \
+    ! grep -E '^github.com/SigNoz/signoz/(ee|cmd/enterprise)(/|$)' /tmp/community-dependencies.txt && \
+    GOOS=linux GOARCH=$TARGETARCH go build -p 2 -trimpath -tags timetzdata \
+      -ldflags "-s -w -X github.com/SigNoz/signoz/pkg/version.variant=community -X github.com/SigNoz/signoz/pkg/version.version=$VERSION -X github.com/SigNoz/signoz/pkg/version.hash=$REVISION" \
+      -o /out/signoz ./cmd/community && \
+    GOOS=linux GOARCH=$TARGETARCH go build -p 2 -trimpath -ldflags '-s -w' -o /out/abera-gateway ./cmd/abera-gateway && \
+    go version -m /out/signoz > /out/build-modules.txt
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
+    go test ./pkg/abera/... ./abera/tools/namespace-go
+RUN tar --exclude=.git -czf /out/abera-signoz-source.tar.gz -C / src collector
+
+FROM --platform=$BUILDPLATFORM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS frontend
+WORKDIR /src/frontend
+ENV CI=1 COREPACK_ENABLE_AUTO_PIN=0 NODE_OPTIONS=--max-old-space-size=4096
+RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
+COPY frontend/ ./
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store pnpm install --frozen-lockfile
+RUN pnpm build
+COPY abera/docker/brand.mjs /tmp/brand.mjs
+RUN node /tmp/brand.mjs
+
+FROM alpine:3.22@sha256:14358309a308569c32bdc37e2e0e9694be33a9d99e68afb0f5ff33cc1f695dce AS runtime
+RUN apk add --no-cache ca-certificates tzdata && \
+    addgroup -g 65532 signoz && adduser -D -H -u 65532 -G signoz signoz && \
+    mkdir -p /var/lib/signoz /var/lib/abera /etc/signoz/web /opt/signoz /usr/share/licenses/signoz && \
+    chown -R 65532:65532 /var/lib/signoz /var/lib/abera /opt/signoz
+WORKDIR /opt/signoz
+COPY --from=backend /out/signoz /usr/local/bin/signoz
+COPY --from=backend /out/abera-gateway /usr/local/bin/abera-gateway
+COPY --from=backend /out/build-modules.txt /usr/share/licenses/signoz/build-modules.txt
+COPY --from=backend /out/abera-signoz-source.tar.gz /usr/share/licenses/signoz/abera-signoz-source.tar.gz
+COPY --from=collector-source /collector/LICENSE /usr/share/licenses/signoz/COLLECTOR-LICENSE
+COPY --from=frontend /src/frontend/build/ /etc/signoz/web/
+COPY templates/ ./templates/
+COPY LICENSE /usr/share/licenses/signoz/LICENSE
+COPY abera/docker/runtime.yaml /etc/signoz/abera.yaml
+USER 65532:65532
+EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=120s --retries=5 \
+    CMD wget -q -O /dev/null http://127.0.0.1:8080/api/v1/health || exit 1
+ENTRYPOINT ["/usr/local/bin/signoz"]
+CMD ["server", "--config", "/etc/signoz/abera.yaml"]

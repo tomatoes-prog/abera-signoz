@@ -1,0 +1,19 @@
+{
+  "environment": "dev",
+  "awsAccountId": "",
+  "instanceType": "r7g.medium",
+  "armImagesVerified": false,
+  "awsVersionedRestoreVerified": false,
+  "hostRebootVerified": false,
+  "hostLossRecoveryWithinFourHours": false,
+  "billingEndToEndVerified": false,
+  "isolationAndNoisyNeighborVerified": false,
+  "storageNearQuotaAndBackupVerified": false,
+  "vulnerabilityAndLicenseReviewComplete": false,
+  "taxClassificationReviewed": false,
+  "additionalCostsMeasured": false,
+  "copPerUsdScenario": 4000,
+  "additionalCostsCop": 0,
+  "plans": ["lite", "lite", "lite", "lite"],
+  "evidenceNotes": "Fill with actual DEV test evidence before allowing admissions. Production requires a separate design and review."
+}

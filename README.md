@@ -1,3 +1,5 @@
+> **Abera SigNoz — piloto DEV:** [implementación, ejecución local y despliegue](abera/README.md). Cuatro clientes por servidor; producción y ventas permanecen deshabilitadas hasta validar capacidad, recuperación y costos.
+
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/readme-assets/signoz-hero-dark.png" width="900">

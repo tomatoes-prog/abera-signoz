@@ -1,5 +1,7 @@
 package kafka
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"fmt"
 )
@@ -8,7 +10,7 @@ func generateConsumerSQL(start, end int64, topic, partition, consumerGroup, queu
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH consumer_query AS (
     SELECT
         resource_string_service$$name,
@@ -40,7 +42,7 @@ FROM
     consumer_query
 ORDER BY
     resource_string_service$$name;
-`, start, end, tsBucketStart, tsBucketEnd, queueType, topic, partition, consumerGroup, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, queueType, topic, partition, consumerGroup, timeRange)
 	return query
 }
 
@@ -49,7 +51,7 @@ func generatePartitionLatencySQL(start, end int64, queueType string) string {
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH partition_query AS (
     SELECT
         quantile(0.99)(durationNano) / 1000000 AS p99,
@@ -76,7 +78,7 @@ FROM
     partition_query
 ORDER BY
     topic;
-`, start, end, tsBucketStart, tsBucketEnd, queueType, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, queueType, timeRange)
 	return query
 }
 
@@ -85,7 +87,7 @@ func generateConsumerPartitionLatencySQL(start, end int64, topic, partition, que
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH consumer_pl AS (
     SELECT
         attributes_string['messaging.kafka.consumer.group'] AS consumer_group,
@@ -116,7 +118,7 @@ FROM
     consumer_pl
 ORDER BY
     consumer_group;
-`, start, end, tsBucketStart, tsBucketEnd, queueType, topic, partition, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, queueType, topic, partition, timeRange)
 	return query
 }
 
@@ -125,7 +127,7 @@ func generateProducerPartitionThroughputSQL(start, end int64, queueType string) 
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000 // t, svc, rps, byte*, p99, err
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH producer_latency AS (
     SELECT
 		resource_string_service$$name,
@@ -152,7 +154,7 @@ SELECT
     COALESCE(total_requests / %d, 0) AS throughput
 FROM
     producer_latency
-`, start, end, tsBucketStart, tsBucketEnd, queueType, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, queueType, timeRange)
 	return query
 }
 
@@ -161,7 +163,7 @@ func generateProducerTopicLatencySQL(start, end int64, topic, service, queueType
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH consumer_latency AS (
     SELECT
         quantile(0.99)(durationNano) / 1000000 AS p99,
@@ -188,7 +190,7 @@ SELECT
     COALESCE(total_requests / %d, 0) AS throughput
 FROM
     consumer_latency
-`, start, end, tsBucketStart, tsBucketEnd, service, queueType, topic, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, service, queueType, topic, timeRange)
 	return query
 }
 
@@ -197,7 +199,7 @@ func generateConsumerLatencySQL(start, end int64, queueType string) string {
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH consumer_latency AS (
     SELECT
         resource_string_service$$name,
@@ -228,7 +230,7 @@ FROM
     consumer_latency
 ORDER BY
     topic;
-`, start, end, tsBucketStart, tsBucketEnd, queueType, timeRange, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, queueType, timeRange, timeRange)
 	return query
 }
 
@@ -237,7 +239,7 @@ func generateConsumerServiceLatencySQL(start, end int64, topic, service, queueTy
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH consumer_latency AS (
     SELECT
         quantile(0.99)(durationNano) / 1000000 AS p99,
@@ -264,13 +266,13 @@ SELECT
     COALESCE(total_requests / %d, 0) AS throughput
 FROM
     consumer_latency
-`, start, end, tsBucketStart, tsBucketEnd, service, queueType, topic, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, service, queueType, topic, timeRange)
 	return query
 }
 
 // s4
 func generateProducerConsumerEvalSQL(start, end int64, queueType string, evalTime int64) string {
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH trace_data AS (
     SELECT
         p.resource_string_service$$name AS producer_service,
@@ -314,7 +316,7 @@ FROM trace_data
 GROUP BY
     producer_service,
     consumer_service
-`, start, end, start, end, queueType, queueType, evalTime, evalTime)
+`), start, end, start, end, queueType, queueType, evalTime, evalTime)
 	return query
 }
 
@@ -322,7 +324,7 @@ func generateProducerSQL(start, end int64, topic, partition, queueType string) s
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH producer_query AS (
     SELECT
         resource_string_service$$name,
@@ -351,7 +353,7 @@ FROM
     producer_query
 ORDER BY
     resource_string_service$$name;
-`, start, end, tsBucketStart, tsBucketEnd, queueType, topic, partition, timeRange)
+`), start, end, tsBucketStart, tsBucketEnd, queueType, topic, partition, timeRange)
 	return query
 }
 
@@ -359,7 +361,7 @@ func generateNetworkLatencyThroughputSQL(start, end int64, consumerGroup, partit
 	timeRange := (end - start) / 1000000000
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 SELECT
     attributes_string['messaging.client_id'] AS client_id,
 	resources_string['service.instance.id'] AS service_instance_id,
@@ -377,14 +379,14 @@ WHERE
     AND attributes_string['messaging.destination.partition.id'] = '%s'
 GROUP BY service_name, client_id, service_instance_id
 ORDER BY throughput DESC
-`, timeRange, start, end, tsBucketStart, tsBucketEnd, queueType, consumerGroup, partitionID)
+`), timeRange, start, end, tsBucketStart, tsBucketEnd, queueType, consumerGroup, partitionID)
 	return query
 }
 
 func onboardProducersSQL(start, end int64, queueType string) string {
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 SELECT 
     COUNT(*) = 0 AS entries,
     COUNT(IF(attribute_string_messaging$$system = '%s', 1, NULL)) = 0 AS queue,
@@ -397,14 +399,14 @@ WHERE
     timestamp >= '%d'
     AND timestamp <= '%d'
     AND ts_bucket_start >=  '%d'
-    AND ts_bucket_start <= '%d';`, queueType, start, end, tsBucketStart, tsBucketEnd)
+    AND ts_bucket_start <= '%d';`), queueType, start, end, tsBucketStart, tsBucketEnd)
 	return query
 }
 
 func onboardConsumerSQL(start, end int64, queueType string) string {
 	tsBucketStart := (start / 1000000000) - 1800
 	tsBucketEnd := end / 1000000000
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 SELECT  
     COUNT(*) = 0 AS entries,
     COUNT(IF(attribute_string_messaging$$system = '%s', 1, NULL)) = 0 AS queue,
@@ -421,6 +423,6 @@ WHERE
     timestamp >= '%d'
     AND timestamp <= '%d'
     AND ts_bucket_start >=  '%d'
-    AND ts_bucket_start <= '%d'	;`, queueType, start, end, tsBucketStart, tsBucketEnd)
+    AND ts_bucket_start <= '%d'	;`), queueType, start, end, tsBucketStart, tsBucketEnd)
 	return query
 }

@@ -1,5 +1,7 @@
 package audittelemetryschema
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	schema "github.com/SigNoz/signoz-otel-collector/cmd/signozschemamigrator/schema_migrator"
 	qbtypes "github.com/SigNoz/signoz/pkg/types/querybuildertypes/querybuildertypesv5"
@@ -129,7 +131,6 @@ var auditLogColumns = map[string]*schema.Column{
 }
 
 const (
-	DBName                      = "signoz_audit"
 	AuditLogsTableName          = "distributed_logs"
 	AuditLogsLocalTableName     = "logs"
 	TagAttributesTableName      = "distributed_tag_attributes"
@@ -138,3 +139,5 @@ const (
 	LogResourceKeysTblName      = "distributed_logs_resource_keys"
 	LogsResourceTableName       = "distributed_logs_resource"
 )
+
+var DBName = aberanamespace.Resolve("signoz_audit")

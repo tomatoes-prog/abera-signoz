@@ -1,5 +1,7 @@
 package queues
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"fmt"
 	"strings"
@@ -47,7 +49,7 @@ func generateOverviewSQL(start, end int64, item []v3.FilterItem) string {
 		whereSQL = fmt.Sprintf("AND %s", whereSQL)
 	}
 
-	query := fmt.Sprintf(`
+	query := fmt.Sprintf(aberanamespace.Resolve(`
 WITH
     processed_traces AS (
         SELECT
@@ -109,7 +111,7 @@ FROM
 ORDER BY
     aggregated_metrics.service_name,
     aggregated_metrics.span_name;
-`, tsBucketStart, tsBucketEnd,
+`), tsBucketStart, tsBucketEnd,
 		whereSQL, timeRangeSecs,
 	)
 

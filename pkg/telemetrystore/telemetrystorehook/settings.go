@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/ClickHouse/clickhouse-go/v2"
+	"github.com/SigNoz/signoz/pkg/abera/namespace"
+	"github.com/SigNoz/signoz/pkg/abera/querylimits"
 	"github.com/SigNoz/signoz/pkg/factory"
 	"github.com/SigNoz/signoz/pkg/telemetrystore"
 	"github.com/SigNoz/signoz/pkg/types/ctxtypes"
@@ -72,6 +74,9 @@ func (h *provider) BeforeQuery(ctx context.Context, _ *telemetrystore.QueryEvent
 		settings["result_overflow_mode"] = ctx.Value("result_overflow_mode")
 	}
 
+	if namespace.Managed() {
+		ctx = querylimits.Apply(ctx, settings)
+	}
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(settings))
 	return ctx
 }

@@ -1,5 +1,7 @@
 package clickhouseReader
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"time"
 
@@ -16,28 +18,27 @@ const (
 )
 
 const (
-	defaultTraceDB                 string        = "signoz_traces"
-	defaultOperationsTable         string        = "distributed_signoz_operations"
-	defaultIndexTable              string        = "distributed_signoz_index_v2"
-	defaultLocalIndexTable         string        = "signoz_index_v2"
-	defaultErrorTable              string        = "distributed_signoz_error_index_v2"
-	defaultDurationTable           string        = "distributed_durationSort"
-	defaultUsageExplorerTable      string        = "distributed_usage_explorer"
-	defaultSpansTable              string        = "distributed_signoz_spans"
-	defaultDependencyGraphTable    string        = "distributed_dependency_graph_minutes_v2"
-	defaultTopLevelOperationsTable string        = "distributed_top_level_operations"
-	defaultSpanAttributeTableV2    string        = "distributed_tag_attributes_v2"
-	defaultSpanAttributeKeysTable  string        = "distributed_span_attributes_keys"
-	defaultLogsDB                  string        = "signoz_logs"
-	defaultLogsTable               string        = "distributed_logs"
-	defaultLogsLocalTable          string        = "logs"
-	defaultLogAttributeKeysTable   string        = "distributed_logs_attribute_keys"
-	defaultLogResourceKeysTable    string        = "distributed_logs_resource_keys"
-	defaultLogTagAttributeTableV2  string        = "distributed_tag_attributes_v2"
-	defaultLiveTailRefreshSeconds  int           = 5
-	defaultWriteBatchDelay         time.Duration = 5 * time.Second
-	defaultWriteBatchSize          int           = 10000
-	defaultEncoding                Encoding      = EncodingJSON
+	defaultOperationsTable         string = "distributed_signoz_operations"
+	defaultIndexTable              string = "distributed_signoz_index_v2"
+	defaultLocalIndexTable         string = "signoz_index_v2"
+	defaultErrorTable              string = "distributed_signoz_error_index_v2"
+	defaultDurationTable           string = "distributed_durationSort"
+	defaultUsageExplorerTable      string = "distributed_usage_explorer"
+	defaultSpansTable              string = "distributed_signoz_spans"
+	defaultDependencyGraphTable    string = "distributed_dependency_graph_minutes_v2"
+	defaultTopLevelOperationsTable string = "distributed_top_level_operations"
+	defaultSpanAttributeTableV2    string = "distributed_tag_attributes_v2"
+	defaultSpanAttributeKeysTable  string = "distributed_span_attributes_keys"
+
+	defaultLogsTable              string        = "distributed_logs"
+	defaultLogsLocalTable         string        = "logs"
+	defaultLogAttributeKeysTable  string        = "distributed_logs_attribute_keys"
+	defaultLogResourceKeysTable   string        = "distributed_logs_resource_keys"
+	defaultLogTagAttributeTableV2 string        = "distributed_tag_attributes_v2"
+	defaultLiveTailRefreshSeconds int           = 5
+	defaultWriteBatchDelay        time.Duration = 5 * time.Second
+	defaultWriteBatchSize         int           = 10000
+	defaultEncoding               Encoding      = EncodingJSON
 
 	defaultLogsLocalTableV2         string = "logs_v2"
 	defaultLogsTableV2              string = "distributed_logs_v2"
@@ -49,11 +50,20 @@ const (
 	defaultTraceResourceTableV3 string = "distributed_traces_v3_resource"
 	defaultTraceSummaryTable    string = "distributed_trace_summary"
 
-	defaultMetadataDB    string = "signoz_metadata"
 	defaultMetadataTable string = "distributed_attributes_metadata"
 )
 
+var
+
 // NamespaceConfig is Clickhouse's internal configuration data
+(
+	defaultTraceDB string = aberanamespace.Resolve("signoz_traces")
+
+	defaultLogsDB string = aberanamespace.Resolve("signoz_logs")
+
+	defaultMetadataDB string = aberanamespace.Resolve("signoz_metadata")
+)
+
 type namespaceConfig struct {
 	namespace               string
 	Enabled                 bool

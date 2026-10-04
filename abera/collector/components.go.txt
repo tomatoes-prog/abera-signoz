@@ -1,0 +1,48 @@
+// Abera's minimal component registry for SigNoz Collector v0.144.6.
+// Modified from SigNoz/signoz-otel-collector. Distributed under AGPL-3.0.
+package components
+
+import (
+	"github.com/SigNoz/signoz-otel-collector/exporter/clickhouselogsexporter"
+	"github.com/SigNoz/signoz-otel-collector/exporter/clickhousetracesexporter"
+	"github.com/SigNoz/signoz-otel-collector/exporter/signozclickhousemetrics"
+	"github.com/SigNoz/signoz-otel-collector/processor/signozspanmetricsprocessor"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/healthcheckextension"
+	"github.com/open-telemetry/opentelemetry-collector-contrib/extension/storage/filestorage"
+	"go.opentelemetry.io/collector/connector"
+	"go.opentelemetry.io/collector/exporter"
+	"go.opentelemetry.io/collector/extension"
+	"go.opentelemetry.io/collector/otelcol"
+	"go.opentelemetry.io/collector/processor"
+	"go.opentelemetry.io/collector/processor/batchprocessor"
+	"go.opentelemetry.io/collector/processor/memorylimiterprocessor"
+	"go.opentelemetry.io/collector/receiver"
+	"go.opentelemetry.io/collector/receiver/otlpreceiver"
+	"go.opentelemetry.io/collector/service/telemetry/otelconftelemetry"
+	"go.uber.org/multierr"
+)
+
+func Components() (otelcol.Factories, error) {
+	return CoreComponents(nil, nil,
+		[]processor.Factory{signozspanmetricsprocessor.NewFactory()},
+		[]exporter.Factory{clickhouselogsexporter.NewFactory(), clickhousetracesexporter.NewFactory(), signozclickhousemetrics.NewFactory()}, nil)
+}
+
+// Keep the upstream signature for the embedded pipeline simulator.
+func CoreComponents(ext []extension.Factory, rec []receiver.Factory, proc []processor.Factory, exp []exporter.Factory, con []connector.Factory) (otelcol.Factories, error) {
+	var f otelcol.Factories
+	var err error
+	var errs []error
+	f.Extensions, err = otelcol.MakeFactoryMap(append(ext, healthcheckextension.NewFactory(), filestorage.NewFactory())...)
+	errs = append(errs, err)
+	f.Receivers, err = otelcol.MakeFactoryMap(append(rec, otlpreceiver.NewFactory())...)
+	errs = append(errs, err)
+	f.Processors, err = otelcol.MakeFactoryMap(append(proc, batchprocessor.NewFactory(), memorylimiterprocessor.NewFactory())...)
+	errs = append(errs, err)
+	f.Exporters, err = otelcol.MakeFactoryMap(exp...)
+	errs = append(errs, err)
+	f.Connectors, err = otelcol.MakeFactoryMap(con...)
+	errs = append(errs, err)
+	f.Telemetry = otelconftelemetry.NewFactory()
+	return f, multierr.Combine(errs...)
+}

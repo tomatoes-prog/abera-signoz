@@ -1,5 +1,7 @@
 package tracestelemetryschema
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"github.com/SigNoz/signoz/pkg/types/telemetrytypes"
 )
@@ -505,7 +507,6 @@ var (
 )
 
 const (
-	DBName                        = "signoz_traces"
 	SpanIndexV3TableName          = "distributed_signoz_index_v3"
 	SpanIndexV3LocalTableName     = "signoz_index_v3"
 	TagAttributesV2TableName      = "distributed_tag_attributes_v2"
@@ -515,3 +516,5 @@ const (
 	SpanAttributesKeysTblName     = "distributed_span_attributes_keys"
 	TracesResourceV3TableName     = "distributed_traces_v3_resource"
 )
+
+var DBName = aberanamespace.Resolve("signoz_traces")

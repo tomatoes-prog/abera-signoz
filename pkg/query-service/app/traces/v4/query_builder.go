@@ -1,5 +1,7 @@
 package v4
 
+import aberanamespace "github.com/SigNoz/signoz/pkg/abera/namespace"
+
 import (
 	"fmt"
 	"strings"
@@ -282,7 +284,7 @@ func buildTracesQuery(start, end, step int64, mq *v3.BuilderQuery, panelType v3.
 		filterSubQuery = filterSubQuery + " AND " + emptyValuesInGroupByFilter
 	}
 
-	resourceSubQuery, err := resource.BuildResourceSubQuery("signoz_traces", "distributed_traces_v3_resource", bucketStart, bucketEnd, mq.Filters, mq.GroupBy, mq.AggregateAttribute, false, false)
+	resourceSubQuery, err := resource.BuildResourceSubQuery(aberanamespace.Resolve("signoz_traces"), "distributed_traces_v3_resource", bucketStart, bucketEnd, mq.Filters, mq.GroupBy, mq.AggregateAttribute, false, false)
 	if err != nil {
 		return "", err
 	}
