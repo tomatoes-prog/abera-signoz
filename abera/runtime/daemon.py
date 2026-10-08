@@ -75,7 +75,8 @@ class Controller:
             self.lease = True
             self.host.observe()
             observation = read_json(self.host.root / "observation.json")
-            admission = self.ssm.get_parameter(Name=self.env["ADMISSION_PARAMETER"])["Parameter"]["Value"] == "true"
+            gate = self.core.get_item(Key={'pk': 'MAINTENANCE#abera-signoz', 'sk': 'META'}, ConsistentRead=True).get('Item')
+            admission = not gate and self.ssm.get_parameter(Name=self.env["ADMISSION_PARAMETER"])["Parameter"]["Value"] == "true"
             self.core.put_item(Item={"pk": "CAPACITY_POOL#abera-signoz", "sk": "META", "healthyUntil": iso(75),
                 "admissionEnabled": admission and observation["diskHealthy"],
                 "instanceId": self.env["HOST_INSTANCE_ID"], "maxSubscriptions": 4})
@@ -181,6 +182,10 @@ class Controller:
                 result["internalParameters"] = {"HostInstanceId": self.env["HOST_INSTANCE_ID"], "HostPort": str(24800+t["slot"])}
             elif operation in {"BACKUP", "ARCHIVE", "DELETE", "UPDATE"}:
                 if operation == "UPDATE":
+                    if request['context'].get('maintenanceReview'):
+                        from .maintenance import prepare
+                        prepare(self, request)
+                        return result
                     lifecycle.release_images(self.host, request["release"])
                 if operation == "DELETE" and not any(t["subscriptionId"] == sid for t in self.host.state["tenants"]):
                     return result  # a compensated failed CREATE has no data left
@@ -215,6 +220,12 @@ class Controller:
                 raise RuntimeFailure("unsupported driver operation")
         elif hook == "verify":
             if operation == "UPDATE":
+                if request['context'].get('maintenanceReview'):
+                    from .maintenance import verify
+                    receipt = verify(self, request)
+                    if receipt is None:
+                        return {'status': 'IN_PROGRESS'}
+                    result['metadata']['maintenanceResult'] = receipt
                 lifecycle.update(self.host, sid, lifecycle.release_images(self.host, request["release"]))
                 sub = self.fence(request)
                 lifecycle.reconcile(self.host, sid, sub["billingRevision"], sub["entitlementContext"]["terms"])
@@ -263,6 +274,8 @@ class Controller:
             except Exception as exc:
                 print(json.dumps({"job": item["pk"], "errorType": type(exc).__name__}), flush=True)
                 result = {"status": "FAILED", "error": {"code": "HOST_ACTION_FAILED", "message": "Host operation failed; inspect the private runtime state.", "retryable": False}}
+            if result['status'] == 'IN_PROGRESS':
+                continue  # restart/helper work resumes the same durable queue item
             self.jobs.update_item(Key=key, UpdateExpression="SET #s=:status, #r=:response, expiresAt=:expiry REMOVE #q",
                 ExpressionAttributeNames={"#s": "status", "#r": "response", "#q": "queue"},
                 ExpressionAttributeValues={":status": "SUCCEEDED" if result["status"] == "DONE" else "FAILED", ":response": dynamo(result), ":expiry": int(time.time())+90*86400})
@@ -274,6 +287,8 @@ class Controller:
                 receipt = record["receipt"]
                 cloud_backup.purge(self.s3, receipt, subscription_id=receipt["subscriptionId"], bucket=self.env["BACKUP_BUCKET"])
                 path.unlink()
+        if self.core.get_item(Key={'pk': 'MAINTENANCE#abera-signoz', 'sk': 'META'}, ConsistentRead=True).get('Item'):
+            return
         for tenant in self.host.state["tenants"]:
             sub = self.subscription(tenant["subscriptionId"])
             if sub.get("activeOperationId"):
