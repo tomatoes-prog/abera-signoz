@@ -75,7 +75,7 @@ class Controller:
             self.lease = True
             self.host.observe()
             observation = read_json(self.host.root / "observation.json")
-            gate = self.core.get_item(Key={'pk': 'MAINTENANCE#abera-signoz', 'sk': 'META'}, ConsistentRead=True).get('Item')
+            gate = self.core.get_item(Key={'pk': 'CAPACITY#abera-signoz#MAINTENANCE', 'sk': 'LOCK'}, ConsistentRead=True).get('Item')
             admission = not gate and self.ssm.get_parameter(Name=self.env["ADMISSION_PARAMETER"])["Parameter"]["Value"] == "true"
             self.core.put_item(Item={"pk": "CAPACITY_POOL#abera-signoz", "sk": "META", "healthyUntil": iso(75),
                 "admissionEnabled": admission and observation["diskHealthy"],
@@ -287,7 +287,7 @@ class Controller:
                 receipt = record["receipt"]
                 cloud_backup.purge(self.s3, receipt, subscription_id=receipt["subscriptionId"], bucket=self.env["BACKUP_BUCKET"])
                 path.unlink()
-        if self.core.get_item(Key={'pk': 'MAINTENANCE#abera-signoz', 'sk': 'META'}, ConsistentRead=True).get('Item'):
+        if self.core.get_item(Key={'pk': 'CAPACITY#abera-signoz#MAINTENANCE', 'sk': 'LOCK'}, ConsistentRead=True).get('Item'):
             return
         for tenant in self.host.state["tenants"]:
             sub = self.subscription(tenant["subscriptionId"])

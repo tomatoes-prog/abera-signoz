@@ -30,7 +30,10 @@ class S3:
 def setup(tmp_path, monkeypatch):
     images = {name: 'repo/'+name+'@sha256:'+'b'*64 for name in ('app','collector','clickhouse','keeper','admin')}
     host=Host(tmp_path); backups=[]
-    core=SimpleNamespace(get_item=lambda **kw: {'Item': {'operationId':'operation','unit':'host:i-host'}})
+    def gate(**kw):
+        assert kw['Key'] == {'pk': 'CAPACITY#abera-signoz#MAINTENANCE', 'sk': 'LOCK'}
+        return {'Item': {'operationId':'operation','unit':'host:i-host'}}
+    core=SimpleNamespace(get_item=gate)
     controller=SimpleNamespace(host=host, core=core, s3=S3(), env={'HOST_INSTANCE_ID':'i-host', 'BACKUP_BUCKET':'bucket', 'DATA_KEY_ARN':'kms'},
         subscription=lambda sid: {'customerId':'customer-'+sid, 'currentVersion':'0.1.0', 'activeOperationId':'operation' if sid=='sub-a' else None})
     def backup(request, final):
@@ -57,6 +60,7 @@ def test_shared_backup_then_update_preserves_neighbours_and_retries(setup):
     assert backups == ['sub-a','sub-b']
     assert controller.host.state['clickhouseImage'].startswith('old')
     assert len(controller.s3.objects) == 2
+    assert all(key.startswith('recovery/_maintenance/') for key in controller.s3.objects)
     result=m.verify(controller,request)
     assert result['verified'] and result['members'] == ['sub-a','sub-b']
     assert controller.host.state['tenants'] == before

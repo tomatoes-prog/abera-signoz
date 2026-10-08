@@ -33,7 +33,7 @@ def validate(controller, request):
             or not procedure.get('compatibilityEvidence')
             or not set(procedure.get('components', [])) <= {'controller', 'clickhouse', 'keeper'}):
         raise RuntimeFailure('Unsupported shared transition; implement and review its migration adapter')
-    gate = controller.core.get_item(Key={'pk': 'MAINTENANCE#abera-signoz', 'sk': 'META'}, ConsistentRead=True).get('Item', {})
+    gate = controller.core.get_item(Key={'pk': 'CAPACITY#abera-signoz#MAINTENANCE', 'sk': 'LOCK'}, ConsistentRead=True).get('Item', {})
     if gate.get('operationId') != request['operation']['id'] or gate.get('unit') != reviewed['unit']:
         raise RuntimeFailure('Shared maintenance no longer owns the admission gate')
     tenants = controller.host.state['tenants']
@@ -102,7 +102,7 @@ def prepare(controller, request):
         # Storage files are cold and checksummed. This is integrity evidence;
         # tenant receipts separately carry actual native restore verification.
         checksum = digest(archive)
-        object_key = 'maintenance/' + path.stem + '/' + archive.name
+        object_key = 'recovery/_maintenance/' + path.stem + '/' + archive.name
         controller.s3.upload_file(str(archive), controller.env['BACKUP_BUCKET'], object_key,
             ExtraArgs={'ServerSideEncryption': 'aws:kms', 'SSEKMSKeyId': controller.env['DATA_KEY_ARN'], 'Metadata': {'sha256': checksum}})
         obj = controller.s3.head_object(Bucket=controller.env['BACKUP_BUCKET'], Key=object_key)
