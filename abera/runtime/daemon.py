@@ -9,6 +9,7 @@ import json
 import base64
 import os
 import secrets
+import re
 import subprocess
 import threading
 import time
@@ -40,6 +41,9 @@ class Controller:
         self.host, self.env = host, env
         if env["ENVIRONMENT"] != "dev":
             raise RuntimeFailure("production is gated for this release")
+        self.group_id = env.get("HOST_GROUP_ID", "")
+        if not re.fullmatch(r"[a-f0-9]{20}", self.group_id):
+            raise RuntimeFailure("the cloud controller requires an assigned host group")
         self.jobs = session.resource("dynamodb").Table(env["JOB_TABLE"])
         self.core = session.resource("dynamodb").Table(env["CORE_TABLE"])
         self.s3, self.secrets = session.client("s3"), session.client("secretsmanager")
@@ -64,22 +68,31 @@ class Controller:
         item = self.core.get_item(Key={"pk": "SUB#" + sid, "sk": "META"}, ConsistentRead=True).get("Item")
         if not item or item["productId"] != "abera-signoz":
             raise RuntimeFailure("subscription identity is unavailable")
-        return plain(item)
+        assigned = self.jobs.get_item(Key={"pk": "SUB#" + sid}, ConsistentRead=True).get("Item")
+        group = self.jobs.get_item(Key={"pk": "GROUP#" + self.group_id}, ConsistentRead=True).get("Item")
+        if (not assigned or not group or assigned.get("groupId") != self.group_id
+                or assigned.get("customerId") != item["customerId"]
+                or group.get("slots", {}).get(str(assigned["slot"])) != sid
+                or group["status"] not in {"CREATING", "READY"}):
+            raise RuntimeFailure("subscription belongs to another host or has no owned slot")
+        return {**plain(item), "capacitySlot": int(assigned["slot"]), "hostAllocationOperationId": assigned["allocationOperationId"]}
 
     def heartbeat(self):
         now = int(time.time())
         try:
-            self.jobs.update_item(Key={"pk": "HOST#pilot"}, UpdateExpression="SET #o=:owner, expiresAt=:expiry",
+            group = self.jobs.get_item(Key={"pk": "GROUP#" + self.group_id}, ConsistentRead=True).get("Item", {})
+            if (group.get("status") not in {"CREATING", "READY", "RETIRING"}
+                    or group.get("outputs", {}).get("HostInstanceId", self.env["HOST_INSTANCE_ID"]) != self.env["HOST_INSTANCE_ID"]):
+                raise RuntimeFailure("host allocation or instance ownership changed")
+            self.jobs.update_item(Key={"pk": "HOST#" + self.group_id}, UpdateExpression="SET #o=:owner, expiresAt=:expiry, instanceId=:instance",
                 ConditionExpression="attribute_not_exists(pk) OR #o=:owner OR expiresAt<:now",
-                ExpressionAttributeNames={"#o": "owner"}, ExpressionAttributeValues={":owner": self.owner, ":expiry": now+90, ":now": now})
+                ExpressionAttributeNames={"#o": "owner"}, ExpressionAttributeValues={":owner": self.owner, ":expiry": now+90, ":now": now, ":instance": self.env["HOST_INSTANCE_ID"]})
             self.lease = True
             self.host.observe()
             observation = read_json(self.host.root / "observation.json")
-            gate = self.core.get_item(Key={'pk': 'CAPACITY#abera-signoz#MAINTENANCE', 'sk': 'LOCK'}, ConsistentRead=True).get('Item')
-            admission = not gate and self.ssm.get_parameter(Name=self.env["ADMISSION_PARAMETER"])["Parameter"]["Value"] == "true"
-            self.core.put_item(Item={"pk": "CAPACITY_POOL#abera-signoz", "sk": "META", "healthyUntil": iso(75),
-                "admissionEnabled": admission and observation["diskHealthy"],
-                "instanceId": self.env["HOST_INSTANCE_ID"], "maxSubscriptions": 4})
+            self.jobs.update_item(Key={"pk": "HOST#" + self.group_id}, UpdateExpression="SET diskHealthy=:healthy",
+                ConditionExpression="#o=:owner", ExpressionAttributeNames={"#o": "owner"},
+                ExpressionAttributeValues={":healthy": observation["diskHealthy"], ":owner": self.owner})
         except Exception:
             self.lease = False
             # Expiring gateway health and pool readiness deny new ingestion and
@@ -95,6 +108,11 @@ class Controller:
         sub = self.subscription(request["subscription"]["id"])
         if sub.get("activeOperationId") != request["operation"]["id"]:
             raise RuntimeFailure("operation no longer owns this subscription")
+        if getattr(self, "group_id", None):
+            allocation = request.get("context", {}).get("sharedHostAllocation", {})
+            if allocation != {"groupId": self.group_id, "slot": sub["capacitySlot"], "customerId": sub["customerId"],
+                              "allocationOperationId": sub["hostAllocationOperationId"]}:
+                raise RuntimeFailure("job targets a different host allocation")
         return sub
 
     def backup(self, request, *, final=False):
@@ -102,9 +120,11 @@ class Controller:
         bid = "backup-" + __import__("hashlib").sha256((sid + ":" + op).encode()).hexdigest()[:32]
         cache = self.host.root / "cloud-receipts" / (bid + ".json")
         if cache.exists():
+            receipt = read_json(cache)
+            self.journal_backup(request, receipt)
             if final:
                 stop(self.host, tenant_for(self.host, sid))
-            return read_json(cache)
+            return receipt
         directory = capture(self.host, sid, bid, resume=not final)
         receipt = cloud_backup.upload(self.s3, self.env["BACKUP_BUCKET"], self.env["DATA_KEY_ARN"], directory,
                                       request, self.env["AWS_ACCOUNT_ID"], self.env["AWS_REGION"])
@@ -115,8 +135,30 @@ class Controller:
             expires = datetime.fromisoformat(receipt["capturedAt"].replace("Z", "+00:00")) + timedelta(days=30)
             write_json(self.host.root / "backup-expiry" / (bid + ".json"), {"expiresAt": expires.strftime("%Y-%m-%dT%H:%M:%SZ"), "receipt": receipt})
         write_json(cache, receipt)
+        self.journal_backup(request, receipt)
         confined_remove(directory, self.host.root / "backups")
         return receipt
+
+    def journal_backup(self, request, receipt):
+        archive = request["operation"].get("type", "BACKUP").upper() == "ARCHIVE"
+        if archive:
+            existing = self.jobs.get_item(Key={"pk": "BACKUP#" + receipt["backupId"]}, ConsistentRead=True).get("Item", {})
+            if existing.get("kind") in {"CORE_ARCHIVE", "OPERATIONAL"}:
+                return  # A retry must not undo a committed archive or compensation.
+        expiry = datetime.fromisoformat(receipt["capturedAt"].replace("Z", "+00:00")) + timedelta(days=30)
+        self.jobs.put_item(Item=dynamo({"pk": "BACKUP#" + receipt["backupId"], "receipt": receipt,
+            "kind": "ARCHIVE_PENDING" if archive else "OPERATIONAL", "operationId": request["operation"]["id"],
+            "expiresAtIso": expiry.strftime("%Y-%m-%dT%H:%M:%SZ")}))
+
+    def archive_authority(self, request, kind):
+        sid, op = request["subscription"]["id"], request["operation"]["id"]
+        bid = "backup-" + __import__("hashlib").sha256((sid + ":" + op).encode()).hexdigest()[:32]
+        key = {"pk": "BACKUP#" + bid}
+        if kind == "OPERATIONAL" and not self.jobs.get_item(Key=key, ConsistentRead=True).get("Item"):
+            return  # The failed archive did not finish capture.
+        self.jobs.update_item(Key=key, UpdateExpression="SET #kind=:kind",
+            ConditionExpression="attribute_exists(pk) AND operationId=:op",
+            ExpressionAttributeNames={"#kind": "kind"}, ExpressionAttributeValues={":kind": kind, ":op": op})
 
     def recover(self, request, sub, receipt, *, cold):
         sid = sub["subscriptionId"]
@@ -225,7 +267,7 @@ class Controller:
                     receipt = verify(self, request)
                     if receipt is None:
                         return {'status': 'IN_PROGRESS'}
-                    result['metadata']['maintenanceResult'] = receipt
+                    result.setdefault('metadata', {})['maintenanceResult'] = receipt
                 lifecycle.update(self.host, sid, lifecycle.release_images(self.host, request["release"]))
                 sub = self.fence(request)
                 lifecycle.reconcile(self.host, sid, sub["billingRevision"], sub["entitlementContext"]["terms"])
@@ -237,7 +279,10 @@ class Controller:
                 sub = self.fence(request)
                 if operation == "ARCHIVE" and not sub.get("archiveDeletionCommittedAt"):
                     raise RuntimeFailure("archive deletion has not been committed")
+                if operation == "ARCHIVE":
+                    self.archive_authority(request, "CORE_ARCHIVE")
                 lifecycle.remove(self.host, sid)
+                result["metadata"] = {"tenantRemoved": True}
         elif hook == "compensate":
             if request.get("context", {}).get("abortTasksOnly"):
                 if any(t["subscriptionId"] == sid for t in self.host.state["tenants"]):
@@ -247,8 +292,13 @@ class Controller:
                 tenant = next((t for t in self.host.state["tenants"] if t["subscriptionId"] == sid), None)
                 if tenant and tenant.get("allocationOperation") == request["operation"]["id"]:
                     lifecycle.remove(self.host, sid)
+                elif tenant:
+                    raise RuntimeFailure("another operation owns the tenant; keep its host allocation")
+                result["metadata"] = {"tenantRemoved": True}
             elif operation in {"ARCHIVE", "DELETE"} and not sub.get("archiveDeletionCommittedAt"):
                 lifecycle.set_state(self.host, sid, "ACTIVE" if sub.get("desiredEntitlement") == "ACTIVE" else "SUSPENDED")
+                if operation == "ARCHIVE":
+                    self.archive_authority(request, "OPERATIONAL")
             elif operation in {"RECOVER", "RESTORE", "UPDATE"}:
                 # Keep a failed restore stopped and owned for inspection. Never
                 # advertise a successful rollback or silently discard its data.
@@ -259,26 +309,61 @@ class Controller:
             raise RuntimeFailure("unsupported driver hook")
         return result
 
+    def assert_empty_host(self, request):
+        group = self.jobs.get_item(Key={"pk": "GROUP#" + self.group_id}, ConsistentRead=True).get("Item", {})
+        if (group.get("status") != "RETIRING" or group.get("retirementId") != request.get("retirementId")
+                or group.get("slots") or int(group.get("assignedCount", -1)) != 0 or self.host.state["tenants"]):
+            raise RuntimeFailure("host retirement does not own an empty group")
+        # Neither an empty assignment counter nor an empty state file proves
+        # that unknown databases or SQLite volumes have disappeared.
+        databases = set(self.host.sql("SHOW DATABASES FORMAT TSV").splitlines())
+        if not databases or databases - {"default", "system", "information_schema", "INFORMATION_SCHEMA"}:
+            raise RuntimeFailure("host still contains customer or unknown databases")
+        if self.host.sql("SELECT count() FROM system.tables WHERE database = 'default'") != "0":
+            raise RuntimeFailure("default database contains unowned tables")
+        volumes = subprocess.run(["docker", "volume", "ls", "--format", "{{.Name}}"], capture_output=True, text=True, timeout=30)
+        project = self.host.state["project"]
+        if volumes.returncode or set(volumes.stdout.splitlines()) - {project + "_clickhouse", project + "_keeper"}:
+            raise RuntimeFailure("host still contains application or unknown Docker volumes")
+        if any((self.host.root / "backups").glob("*")):
+            raise RuntimeFailure("host contains uncommitted backup or restore data")
+        for path in (self.host.root / "backup-expiry").glob("*.json"):
+            record = read_json(path)
+            persisted = self.jobs.get_item(Key={"pk": "BACKUP#" + record["receipt"]["backupId"]}, ConsistentRead=True).get("Item", {})
+            if plain(persisted.get("receipt")) != record["receipt"]:
+                raise RuntimeFailure("backup expiry is not persisted outside the retiring host")
+        self.heartbeat()
+        if not self.lease:
+            raise RuntimeFailure("host retirement lost its controller lease")
+        return {"status": "DONE", "metadata": {"emptyHostProof": {"verified": True, "groupId": self.group_id,
+            "instanceId": self.env["HOST_INSTANCE_ID"], "retirementId": group["retirementId"], "owner": self.owner, "verifiedAt": iso()}}}
+
     def work_once(self):
         if not self.lease:
             return
         response = self.jobs.query(IndexName="queue", KeyConditionExpression="#q=:ready",
-                                  ExpressionAttributeNames={"#q": "queue"}, ExpressionAttributeValues={":ready": "READY"}, Limit=1)
+                                  ExpressionAttributeNames={"#q": "queue"}, ExpressionAttributeValues={":ready": "READY#" + self.group_id}, Limit=1)
         for item in response.get("Items", []):
             item = plain(item)
+            if item.get("groupId") != self.group_id:
+                raise RuntimeFailure("queue item targets another host")
             key = {"pk": item["pk"]}
-            self.jobs.update_item(Key=key, UpdateExpression="SET #s=:running", ConditionExpression="#s IN (:pending,:running)",
-                ExpressionAttributeNames={"#s": "status"}, ExpressionAttributeValues={":running": "RUNNING", ":pending": "PENDING"})
+            self.jobs.update_item(Key=key, UpdateExpression="SET #s=:running, #o=:owner", ConditionExpression="#s IN (:pending,:running) AND groupId=:gid",
+                ExpressionAttributeNames={"#s": "status", "#o": "owner"}, ExpressionAttributeValues={":running": "RUNNING", ":pending": "PENDING", ":owner": self.owner, ":gid": self.group_id})
             try:
-                result = self.execute(item["request"])
+                result = self.assert_empty_host(item["request"]) if item["request"].get("action") == "ASSERT_EMPTY_HOST" else self.execute(item["request"])
             except Exception as exc:
                 print(json.dumps({"job": item["pk"], "errorType": type(exc).__name__}), flush=True)
                 result = {"status": "FAILED", "error": {"code": "HOST_ACTION_FAILED", "message": "Host operation failed; inspect the private runtime state.", "retryable": False}}
             if result['status'] == 'IN_PROGRESS':
                 continue  # restart/helper work resumes the same durable queue item
+            self.heartbeat()
+            if not self.lease:
+                return  # The next controller replays the same idempotent hook.
             self.jobs.update_item(Key=key, UpdateExpression="SET #s=:status, #r=:response, expiresAt=:expiry REMOVE #q",
-                ExpressionAttributeNames={"#s": "status", "#r": "response", "#q": "queue"},
-                ExpressionAttributeValues={":status": "SUCCEEDED" if result["status"] == "DONE" else "FAILED", ":response": dynamo(result), ":expiry": int(time.time())+90*86400})
+                ConditionExpression="#o=:owner AND #s=:running",
+                ExpressionAttributeNames={"#s": "status", "#r": "response", "#q": "queue", "#o": "owner"},
+                ExpressionAttributeValues={":status": "SUCCEEDED" if result["status"] == "DONE" else "FAILED", ":response": dynamo(result), ":expiry": int(time.time())+90*86400, ":owner": self.owner, ":running": "RUNNING"})
 
     def reconcile(self):
         for path in (self.host.root / "backup-expiry").glob("*.json"):
@@ -301,7 +386,7 @@ class Controller:
             interval = read_json(ABERA/"plans.json")["plans"][tenant["plan"]]["backupIntervalHours"]*3600
             if time.time()-last["at"] >= interval and tenant["state"] == "ACTIVE":
                 req = {"environment": "dev", "subscription": {"id": sub["subscriptionId"], "customerId": sub["customerId"]},
-                       "operation": {"id": "scheduled-"+str(int(time.time()//interval))}, "release": {"version": sub["currentVersion"]},
+                       "operation": {"id": "scheduled-"+self.group_id+"-"+str(int(time.time()//interval))}, "release": {"version": sub["currentVersion"]},
                        "context": {"dataGeneration": sub.get("dataGeneration", 1)}}
                 receipt = self.backup(req)
                 receipts = [*last["receipts"], receipt]
@@ -322,8 +407,13 @@ def main():
             images = {key: os.environ[value] for key, value in [("appImage", "APP_IMAGE"), ("collectorImage", "COLLECTOR_IMAGE"), ("clickhouseImage", "CLICKHOUSE_IMAGE"), ("keeperImage", "KEEPER_IMAGE")]}
             if any("@sha256:" not in image for image in images.values()):
                 raise RuntimeFailure("cloud images must be pinned by digest")
-            host.save({"schemaVersion": 1, "local": False, "project": "abera-signoz-dev", "masterPassword": secrets.token_hex(32),
+            group = os.environ["HOST_GROUP_ID"]
+            if not re.fullmatch(r"[a-f0-9]{20}", group):
+                raise RuntimeFailure("invalid assigned host group")
+            host.save({"schemaVersion": 1, "local": False, "hostGroupId": group, "project": "abera-signoz-" + group, "masterPassword": secrets.token_hex(32),
                        "disabledDefaultPassword": secrets.token_hex(32), "tenants": [], **images})
+        if host.state.get("hostGroupId") != os.environ["HOST_GROUP_ID"]:
+            raise RuntimeFailure("mounted storage belongs to a different host group; refusing initialization")
         controller = Controller(host, boto3.Session(region_name=os.environ["AWS_REGION"]), dict(os.environ))
         controller.refresh_registry()
         host.render()

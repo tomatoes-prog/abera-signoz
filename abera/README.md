@@ -1,8 +1,8 @@
-# Abera SigNoz 0.1.0 · piloto de desarrollo
+# Abera SigNoz 0.2.0 · servidores compartidos bajo demanda en DEV
 
-Implementación para **un servidor y cuatro clientes como máximo**. Cada cliente tiene su aplicación Community, SQLite, colector, gateway, credenciales y bases de telemetría. ClickHouse, Keeper y el servidor se comparten. El costo se reduce al compartir el motor y la máquina, manteniendo permisos separados por cliente.
+Automations asigna **hasta cuatro clientes por servidor**. Cuando Billing solicita crear una suscripción pagada, se reutiliza un cupo compatible o se crea otro servidor con su disco. Al archivar o eliminar el último cliente, el controlador verifica que no quedan bases ni volúmenes de aplicaciones y Automations retira el servidor y su disco. Cada cliente conserva su aplicación Community, SQLite, colector, gateway, credenciales y bases de telemetría; ClickHouse y Keeper se comparten dentro de su grupo.
 
-**Estado:** implementación y pruebas locales. El catálogo técnico y comercial queda cerrado, con Pro aplazado. Falta ejecutar la aceptación en AWS ARM antes de abrir el piloto. Un servidor permite recuperación, pero no ofrece alta disponibilidad ante una caída de la máquina o la zona.
+**Estado de 0.2.0:** cambios y pruebas locales; publicación y aceptación AWS pendientes. Esta versión conserva los precios aprobados y Pro aplazado. La foundation de 0.1.0 y su disco recuperado se preservan durante la transición. Un servidor permite recuperación, pero no ofrece alta disponibilidad ante una caída de la máquina o la zona.
 
 ## Planes propuestos
 
@@ -31,7 +31,7 @@ Requisitos: Docker con contenedores Linux, Compose v2 y Python 3.11 o posterior.
 Desde la raíz de `abera-signoz`:
 
 ```powershell
-docker build -f abera/docker/Dockerfile.community --target runtime -t abera/signoz-community:dev --build-arg VERSION=0.1.0 .
+docker build -f abera/docker/Dockerfile.community --target runtime -t abera/signoz-community:dev --build-arg VERSION=0.2.0 .
 docker build -f abera/docker/Dockerfile.community --target collector -t abera/signoz-collector:dev .
 docker build -f abera/docker/Dockerfile.clickhouse -t abera/signoz-clickhouse:dev .
 python abera/tools/runtime.py init-dev --customers 4
@@ -60,6 +60,7 @@ También existen `runtime.py backup development-1`, `runtime.py restore developm
 
 ## Documentación
 
+- [Asignación de hosts por suscripción, retirada y aceptación de 0.2.0](ON_DEMAND_HOSTS.md).
 - [Arquitectura, aislamiento, consumo y lifecycle](ARCHITECTURE.md).
 - [Despliegue y recuperación en DEV; requisitos para PROD](OPERATIONS.md).
 - [Escenario económico reproducible](ECONOMICS.md).

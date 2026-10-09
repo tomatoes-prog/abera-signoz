@@ -1,11 +1,11 @@
 {
   "schemaVersion": 1,
   "productId": "abera-signoz",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "upstreamCommit": "0aeef0dc46daf507778c95cbcb35b8791f94457b",
   "edition": "community",
   "maxCustomersPerHost": 4,
-  "maxHosts": 1,
+  "hostAllocation": "on-demand",
   "productionEnabled": false,
   "images": {
     "clickhouse": "clickhouse/clickhouse-server:25.12.5@sha256:cacf32d6884291dc2ff5e0156a97f46fc53ff7c929a7906d114e268a929dfd3a",
