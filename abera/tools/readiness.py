@@ -12,7 +12,9 @@ from abera.tools.economics import estimate
 REQUIRED = ('armImagesVerified','awsVersionedRestoreVerified','hostRebootVerified',
     'hostLossRecoveryWithinFourHours','billingEndToEndVerified','isolationAndNoisyNeighborVerified',
     'storageNearQuotaAndBackupVerified','vulnerabilityAndLicenseReviewComplete',
-    'taxClassificationReviewed','additionalCostsMeasured')
+    'taxClassificationReviewed','additionalCostsMeasured',
+    'billingOnDemandHostVerified','fifthCustomerNewHostVerified','emptyHostAndVolumeRetiredVerified',
+    'suspendedSubscriptionRetainedVerified','backupExpiryWithoutHostVerified')
 
 
 def check(acceptance, benchmark):
