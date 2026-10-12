@@ -20,10 +20,10 @@ def fixture(tmp_path):
     services = {s: {'image': image} for s in ['clickhouse', 'keeper', 'app-one', 'app-two']}
     (tmp_path / 'compose.json').write_text(json.dumps({'services': services}))
     containers = [{'id': digit * 64, 'kind': 'service', 'service': service, 'image': image,
-                   'project': project, 'running': service != 'app-two', 'privateEnvironment': 'must-not-persist'}
+                   'project': project, 'running': service != 'app-two', 'healthy': True, 'privateEnvironment': 'must-not-persist'}
                   for digit, service in zip('1234', services)]
     containers.append({'id': '5' * 64, 'kind': 'controller', 'name': 'abera-controller',
-                       'groupId': group, 'image': image, 'running': True})
+                       'groupId': group, 'image': image, 'running': True, 'healthy': True})
     docker = Mock()
     docker.inventory.side_effect = lambda: deepcopy(containers)
     actions = []
@@ -186,3 +186,26 @@ def test_partial_cooperative_stop_continues_after_controller_heartbeat_expires(t
     f.docker.stop_wait.side_effect = change
     assert f.power.stop('runtime-one', f.members) is True
     assert f.clock[0] < 3700
+
+
+def test_verify_reads_health_and_never_powers_on_a_stopped_container(tmp_path):
+    f = fixture(tmp_path)
+    completed_cycle(f)
+    f.core.get_item.return_value['Item']['operationId'] = 'runtime-one'
+    actions = len(f.actions)
+    assert f.power.verify('runtime-one', f.members) is True
+    f.containers[2]['healthy'] = False
+    assert f.power.verify('runtime-one', f.members) is False
+    f.containers[2]['healthy'] = True
+    f.containers[2]['running'] = False
+    assert f.power.verify('runtime-one', f.members) is False
+    assert len(f.actions) == actions
+
+
+def test_verify_rejects_a_changed_native_container_identity(tmp_path):
+    f = fixture(tmp_path)
+    completed_cycle(f)
+    f.core.get_item.return_value['Item']['operationId'] = 'runtime-one'
+    f.containers[2]['id'] = '6' * 64
+    with pytest.raises(RuntimeFailure, match='changed container'):
+        f.power.verify('runtime-one', f.members)

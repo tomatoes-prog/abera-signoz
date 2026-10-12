@@ -51,7 +51,8 @@ class DockerPower:
             kind = 'controller' if name == 'abera-controller' else 'service'
             result.append({'id': cid, 'kind': kind, 'name': name, 'image': config['Image'],
                 'groupId': env.get('HOST_GROUP_ID'), 'project': labels.get('com.docker.compose.project'),
-                'service': labels.get('com.docker.compose.service'), 'running': container['State']['Running']})
+                'service': labels.get('com.docker.compose.service'), 'running': container['State']['Running'],
+                'healthy': container['State'].get('Health', {}).get('Status', 'healthy') == 'healthy'})
         if self.helper_id and helpers != 1:
             raise RuntimeFailure('Operator helper was absent from the native Docker inventory')
         return result

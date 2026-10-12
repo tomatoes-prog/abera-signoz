@@ -162,6 +162,24 @@ class RuntimePower:
             return False
         return True
 
+    def verify(self, owner, members):
+        """Read native container state without starting or recreating anything."""
+        group = self._scope(owner, members)
+        receipt = self._document(self.host.root / 'runtime-power.json')
+        if (receipt.get('owner') != owner or receipt.get('members') != sorted(members)
+                or receipt.get('groupId') != group):
+            raise RuntimeFailure('Verification requires the retained cycle owner')
+        if (self.host.root / 'runtime-pause.json').exists():
+            return False
+        inventory = self._owned_inventory()
+        known = {c['id']: c for c in inventory}
+        saved = receipt['containers']
+        if any(c['id'] not in known or any(c.get(k) != known[c['id']].get(k)
+                   for k in ('kind', 'service', 'image', 'project', 'groupId', 'name')) for c in saved):
+            raise RuntimeFailure('Verification cannot adopt changed container identities')
+        return ({c['id'] for c in inventory if c['running']} == {c['id'] for c in saved}
+                and all(known[c['id']].get('healthy') is True for c in saved))
+
     def resume(self, owner, members):
         group = self._scope(owner, members)
         receipt = self._document(self.host.root / 'runtime-power.json')
@@ -205,7 +223,7 @@ def main():
     from .host import Host
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--action', choices=('pause', 'stop', 'resume'), required=True)
+    parser.add_argument('--action', choices=('pause', 'stop', 'resume', 'verify'), required=True)
     parser.add_argument('--owner', required=True)
     parser.add_argument('--members', required=True, help='Exact JSON array of admitted consumers')
     args = parser.parse_args()
