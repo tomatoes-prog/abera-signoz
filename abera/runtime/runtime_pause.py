@@ -51,7 +51,7 @@ def paused(controller):
         scan['ExclusiveStartKey'] = page['LastEvaluatedKey']
     digest = hashlib.sha256(json.dumps(sorted(members), separators=(',', ':')).encode()).hexdigest()
     controller.jobs.update_item(Key={'pk': 'HOST#' + controller.group_id},
-        UpdateExpression='SET runtimePauseOwner=:runtime, runtimePauseMembersDigest=:digest, runtimePauseConfirmedAt=:now',
+        UpdateExpression='SET runtimePauseOwner=:runtime, runtimePauseControllerOwner=:controller, runtimePauseMembersDigest=:digest, runtimePauseConfirmedAt=:now',
         ConditionExpression='#owner=:controller AND instanceId=:instance AND expiresAt>:now',
         ExpressionAttributeNames={'#owner': 'owner'},
         ExpressionAttributeValues={':runtime': intent['owner'], ':digest': digest, ':now': int(time.time()),
