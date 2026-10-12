@@ -130,6 +130,10 @@ class RuntimePower:
         # shutdown rather than wait an hour for a heartbeat that cannot return.
         if not acknowledged and now < intent['deadlineAt'] and not receipt_path.exists():
             return False
+        from .runtime_jobs import outstanding, cancel
+        jobs = outstanding(self, members)
+        if jobs and now < intent['deadlineAt']:
+            raise RuntimeFailure('A cooperative pause cannot bypass outstanding jobs before the one-hour deadline')
         inventory = self._owned_inventory()
         live = [c for c in inventory if c.get('running') is True]
         if receipt_path.exists():
@@ -160,6 +164,7 @@ class RuntimePower:
         # Native exit proof is required even when Docker accepted the requests.
         if any(c.get('running') is not False for c in self._owned_inventory()):
             return False
+        cancel(self, jobs, owner, members)
         return True
 
     def verify(self, owner, members):

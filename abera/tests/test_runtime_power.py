@@ -39,6 +39,7 @@ def fixture(tmp_path):
     core.get_item.return_value = {'Item': {'operationId': 'runtime-one', 'unit': 'runtime:abera-signoz'}}
     jobs = Mock()
     jobs.get_item.return_value = {'Item': {}}
+    jobs.scan.return_value = {'Items': []}
     clock = [100]
     env = {'ENVIRONMENT': 'dev', 'HOST_GROUP_ID': group, 'HOST_INSTANCE_ID': 'i-owned', 'ADMIN_IMAGE': image}
     power = RuntimePower(host, docker, core, jobs, env, lambda: clock[0])

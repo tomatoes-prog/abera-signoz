@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "productId": "abera-signoz",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "upstreamCommit": "0aeef0dc46daf507778c95cbcb35b8791f94457b",
   "edition": "community",
   "maxCustomersPerHost": 4,
