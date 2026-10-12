@@ -365,6 +365,14 @@ class Controller:
                 ExpressionAttributeNames={"#s": "status", "#r": "response", "#q": "queue", "#o": "owner"},
                 ExpressionAttributeValues={":status": "SUCCEEDED" if result["status"] == "DONE" else "FAILED", ":response": dynamo(result), ":expiry": int(time.time())+90*86400, ":owner": self.owner, ":running": "RUNNING"})
 
+    def cycle(self):
+        from .runtime_pause import paused
+        if paused(self):
+            return
+        self.work_once()
+        if self.lease and not paused(self):
+            self.reconcile()
+
     def reconcile(self):
         for path in (self.host.root / "backup-expiry").glob("*.json"):
             record = read_json(path)
@@ -426,9 +434,7 @@ def main():
         threading.Thread(target=heartbeat, daemon=True).start()
         while True:
             try:
-                controller.work_once()
-                if controller.lease:
-                    controller.reconcile()
+                controller.cycle()
             except Exception as exc:
                 print(json.dumps({"controllerError": type(exc).__name__}), flush=True)
             time.sleep(5)
