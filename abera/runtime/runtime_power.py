@@ -51,11 +51,43 @@ class RuntimePower:
                     or intent.get('owner') != owner or intent.get('groupId') != group or intent.get('members') != sorted(members)):
                 raise RuntimeFailure('Another pause owns this host')
             return intent
+        self._retire_restored_receipt(owner, members, group)
         now = int(self.clock())
         intent = {'version': 1, 'environment': 'dev', 'groupId': group, 'owner': owner,
                   'members': sorted(members), 'requestedAt': now, 'deadlineAt': now + 3600}
         write_json(marker, intent)
         return intent
+
+    def _retire_restored_receipt(self, owner, members, group):
+        """A new fenced cycle may replace only a natively restored old cycle.
+
+        Keep the active receipt for resume retries, then retain one completed
+        receipt for inspection. Neither commercial state nor storage is changed.
+        """
+        path = self.host.root / 'runtime-power.json'
+        if not path.exists():
+            return
+        receipt = self._document(path)
+        if (receipt.get('version') != 1 or receipt.get('groupId') != group
+                or receipt.get('members') != sorted(members)
+                or not isinstance(receipt.get('owner'), str)
+                or not re.fullmatch('[A-Za-z0-9:_-]{1,128}', receipt['owner'])
+                or receipt['owner'] == owner):
+            raise RuntimeFailure('A completed power cycle cannot be replayed or reassigned')
+        saved = receipt.get('containers')
+        if (not isinstance(saved, list) or any(not isinstance(c, dict) or not c.get('id') for c in saved)
+                or len({c['id'] for c in saved}) != len(saved)):
+            raise RuntimeFailure('Previous power receipt has incomplete identities')
+        inventory = self._owned_inventory()
+        known = {c['id']: c for c in inventory}
+        if ({c['id'] for c in inventory if c['running']} != {c['id'] for c in saved}
+                or any(c['id'] not in known or any(c.get(k) != known[c['id']].get(k)
+                       for k in ('kind', 'service', 'image', 'project', 'groupId', 'name')) for c in saved)):
+            raise RuntimeFailure('Previous cycle must be fully restored before a new shutdown')
+        # Persist the evidence before releasing the active receipt. Repeating a
+        # new request after interruption validates the same native graph again.
+        write_json(self.host.root / 'runtime-power-completed.json', receipt)
+        path.unlink()
 
     def _owned_inventory(self):
         compose = read_json(self.host.root / 'compose.json')
@@ -83,6 +115,7 @@ class RuntimePower:
     def stop(self, owner, members):
         intent = self.request_pause(owner, members)
         now = int(self.clock())
+        receipt_path = self.host.root / 'runtime-power.json'
         host_record = self.jobs.get_item(Key={'pk': 'HOST#' + intent['groupId']}, ConsistentRead=True).get('Item', {})
         acknowledged = (host_record.get('runtimePauseOwner') == owner
                         and host_record.get('runtimePauseControllerOwner') == host_record.get('owner')
@@ -92,11 +125,13 @@ class RuntimePower:
                         and host_record.get('runtimePauseConfirmedAt', -1) >= intent['requestedAt']
                         and host_record.get('instanceId') == self.env['HOST_INSTANCE_ID']
                         and host_record.get('expiresAt', 0) > now)
-        if not acknowledged and now < intent['deadlineAt']:
+        # Once the owned receipt has been captured, stopping the controller
+        # deliberately removes its heartbeat. A retry must continue the captured
+        # shutdown rather than wait an hour for a heartbeat that cannot return.
+        if not acknowledged and now < intent['deadlineAt'] and not receipt_path.exists():
             return False
         inventory = self._owned_inventory()
         live = [c for c in inventory if c.get('running') is True]
-        receipt_path = self.host.root / 'runtime-power.json'
         if receipt_path.exists():
             receipt = self._document(receipt_path)
             if receipt.get('owner') != owner or receipt.get('members') != sorted(members):
