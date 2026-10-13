@@ -228,9 +228,10 @@ def main():
     from .host import Host
 
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--action', choices=('pause', 'stop', 'resume', 'verify'), required=True)
+    parser.add_argument('--action', choices=('pause', 'stop', 'resume', 'verify', 'archive_start', 'archive_prepare', 'archive_finalize', 'archive_compensate', 'archive_stop'), required=True)
     parser.add_argument('--owner', required=True)
     parser.add_argument('--members', required=True, help='Exact JSON array of admitted consumers')
+    parser.add_argument('--subscription', default='')
     args = parser.parse_args()
     # Read the existing host configuration without evaluating it as shell code.
     config_path = Path('/opt/abera/controller.env')
@@ -244,13 +245,27 @@ def main():
             or env.get('HOST_GROUP_ID') != os.environ.get('HOST_GROUP_ID')):
         raise RuntimeFailure('Operator transport does not match the existing DEV host configuration')
     session = boto3.Session(region_name=env['AWS_REGION'])
+    if args.action.startswith('archive_'):
+        from botocore.config import Config
+        # Long operations are bounded by the SSM wrapper as well; hidden
+        # native retries must not extend an expired maintenance lease.
+        session._session.set_default_client_config(Config(connect_timeout=3, read_timeout=10, retries={'total_max_attempts': 1}))
     data = session.resource('dynamodb')
     docker = DockerPower(helper_id=os.environ['HOSTNAME'], helper_image=os.environ['RUNTIME_HELPER_IMAGE'],
                          helper_group=env['HOST_GROUP_ID'])
     power = RuntimePower(Host(Path('/opt/abera/state')), docker,
                          data.Table(env['CORE_TABLE']), data.Table(env['JOB_TABLE']), env, time.time)
     members = json.loads(args.members)
-    if args.action == 'pause':
+    if args.action.startswith('archive_'):
+        from .offline_archive import OfflineArchive
+        archive = OfflineArchive(power, session)
+        action = args.action[len('archive_'):]
+        if action in {'start', 'stop'}:
+            complete = getattr(archive, action)(args.owner, members, args.subscription)
+        else:
+            complete = archive.job(args.owner, members, args.subscription, action)
+        result = {'complete': complete}
+    elif args.action == 'pause':
         power.request_pause(args.owner, members)
         result = {'pauseRequested': True}
     else:
