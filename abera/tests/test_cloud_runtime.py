@@ -115,6 +115,8 @@ def test_backup_retry_persists_expiry_before_success_and_uses_capture_date(monke
     controller.host = SimpleNamespace(root=tmp_path)
     controller.s3 = object()
     controller.env = dict(BACKUP_BUCKET='backups', DATA_KEY_ARN='kms-key', AWS_ACCOUNT_ID='123456789012', AWS_REGION='us-east-2')
+    persisted = []
+    controller.jobs = SimpleNamespace(put_item=lambda **kw: persisted.append(kw['Item']))
     request = {'subscription': {'id': 'tenant-123'}, 'operation': {'id': 'operation-123', 'type': 'BACKUP'}}
     receipt = {'capturedAt': '2026-09-01T00:00:00Z', 'backupId': 'backup-test'}
     monkeypatch.setattr(daemon, 'capture', lambda *args, **kw: tmp_path/'backups'/'snapshot')
@@ -134,3 +136,26 @@ def test_backup_retry_persists_expiry_before_success_and_uses_capture_date(monke
     monkeypatch.setattr(daemon, 'write_json', write_json)
     assert controller.backup(request) == receipt
     assert len(list((tmp_path/'backup-expiry').glob('*.json'))) == 1
+    assert persisted[0]['expiresAtIso'] == '2026-10-01T00:00:00Z'
+    assert persisted[0]['receipt'] == receipt
+
+
+def test_archive_inventory_is_durable_and_retry_keeps_the_core_retention_authority():
+    controller = Controller.__new__(Controller)
+    items = {}
+    def put_item(Item): items[Item['pk']] = copy.deepcopy(Item)
+    def get_item(Key, **kw): return {'Item': copy.deepcopy(items.get(Key['pk'], {}))}
+    updates = []
+    def update_item(**kw):
+        updates.append(kw)
+        items[kw['Key']['pk']]['kind'] = kw['ExpressionAttributeValues'][':kind']
+    controller.jobs = SimpleNamespace(put_item=put_item, get_item=get_item, update_item=update_item)
+    request = {'subscription': {'id': 'tenant-123'}, 'operation': {'id': 'archive-123', 'type': 'ARCHIVE'}}
+    bid = 'backup-' + hashlib.sha256(b'tenant-123:archive-123').hexdigest()[:32]
+    receipt = {'backupId': bid, 'capturedAt': '2026-09-01T00:00:00Z'}
+    controller.journal_backup(request, receipt)
+    assert items['BACKUP#'+bid]['kind'] == 'ARCHIVE_PENDING'
+    controller.archive_authority(request, 'CORE_ARCHIVE')
+    controller.journal_backup(request, receipt)
+    assert items['BACKUP#'+bid]['kind'] == 'CORE_ARCHIVE'
+    assert updates[0]['ConditionExpression'] == 'attribute_exists(pk) AND operationId=:op'

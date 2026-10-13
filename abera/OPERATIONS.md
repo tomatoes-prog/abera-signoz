@@ -2,6 +2,8 @@
 
 ## Estado inicial seguro
 
+**0.2.0 cambia el ciclo de capacidad.** Seguir [ON_DEMAND_HOSTS.md](ON_DEMAND_HOSTS.md): mantener `EnablePilot=false`, publicar la release revisada y crear los hosts desde las suscripciones de Billing. Los pasos de activación de host único y rechazo del quinto cliente que se conservan más abajo documentan la entrega de 0.1.0; no deben ejecutarse para 0.2.0. El disco legado recuperado permanece protegido. La aceptación de AWS del recorrido nuevo está pendiente.
+
 Las plantillas solo admiten `Environment=dev`. `EnablePilot=false` evita crear la máquina; `EnableAdmissions=false` cierra nuevas reservas. El manifiesto técnico tiene `provisioningEnabled: false`. Producto, planes y ofertas de Billing están retirados y no permiten checkout. Pro no tiene oferta ni configuración técnica desplegable.
 
 La cuenta DEV comprobada es `374786578563`, región `us-east-2`. El cambio de permisos de `abera-dev-security-seed` terminó en `UPDATE_COMPLETE` el 4 de octubre de 2026; la plantilla aplicada conserva la delegación de Chatwoot. La foundation, las imágenes ECR, el host y la actualización de core/Billing siguen pendientes. El catálogo remoto todavía no se modificó.

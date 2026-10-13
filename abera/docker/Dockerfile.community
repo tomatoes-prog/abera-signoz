@@ -40,7 +40,7 @@ COPY --from=collector-source /collector /collector
 # namespace patch as the ingest/migration image.
 RUN go mod edit -replace github.com/SigNoz/signoz-otel-collector=/collector
 ARG TARGETARCH
-ARG VERSION=0.1.0-dev
+ARG VERSION=0.2.0-dev
 ARG REVISION=unknown
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     go list -deps ./cmd/community > /tmp/community-dependencies.txt && \

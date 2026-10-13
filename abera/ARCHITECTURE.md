@@ -10,11 +10,13 @@ sequenceDiagram
     participant D as Driver SigNoz
     participant H as Controlador del servidor
     VPS->>B: Crear orden, plan y AdminEmail
-    B->>C: Validar contrato y reservar hostname/cupo
-    Note over C: Reserva atómica; máximo cuatro cupos; servidor saludable
+    B->>C: Validar contrato y reservar hostname
     B->>B: Confirmar pago y registrar período
     B->>C: Crear suscripción con revisión y períodos pagados
     C->>D: prepare/create (protocolo v4)
+    D->>D: Asignar host/slot atómicamente, máximo cuatro por host
+    D->>D: Reutilizar host compatible o crear stack compartido
+    D->>H: Esperar mount, controlador y heartbeat saludable
     D->>H: Job durable en DynamoDB
     H->>H: Crear bases, migrar, crear cuentas y verificar login
     H->>C: ARN de credenciales + puerto asignado
@@ -22,9 +24,9 @@ sequenceDiagram
     VPS->>B: Reclamar credenciales mediante flujo existente
 ```
 
-`usagePolicy` y `capacityPolicy` son extensiones opcionales del contrato. Los productos que no las declaran conservan su contrato anterior. La reserva del cupo ocurre en la misma transacción que la reserva del hostname. CREATE exige esa reserva. ARCHIVE/DELETE liberan el cupo tras eliminar los recursos del cliente; una limpieza fallida conserva la asignación. RECOVER vuelve a reclamar un cupo mediante una transacción y un registro de propietario idempotente.
+La release 0.2.0 conserva `usagePolicy` prepagado y la reserva estándar de hostname. El límite global de `capacityPolicy` de 0.1.0 se sustituye por el asignador privado del producto en Automations: cuatro slots por host. Billing conserva su API y envía los períodos pagados; CREATE/RECOVER asignan infraestructura después de esa petición. ARCHIVE/DELETE liberan el slot después de la confirmación de eliminación del cliente. Una suspensión conserva la asignación. No se crean servidores al publicar la release ni al reservar una orden sin pago.
 
-El driver Lambda solo encola y consulta trabajos. El controlador ejecuta uno por vez, mantiene un lease y comprueba el propietario y el plazo de la operación. Las renovaciones de una suscripción activa actualizan el contexto de Billing sin desplegar infraestructura; el controlador lee ese contexto y reconcilia los límites. DynamoDB conserva las revisiones para rechazar eventos viejos.
+El driver Lambda coordina asignación, CloudFormation, jobs por host y retirada. Cada controlador ejecuta su propia cola, mantiene su lease y comprueba grupo, slot, cliente, propietario y plazo de la operación. La asignación exige imágenes compartidas y template compatibles; una compra simultánea converge en el mismo grupo y un reintento conserva su slot. Las renovaciones de una suscripción activa actualizan el contexto de Billing sin desplegar infraestructura; el controlador lee ese contexto y reconcilia los límites.
 
 ## Aislamiento
 
@@ -59,10 +61,12 @@ Los backups detienen brevemente **al cliente respaldado**. Incluyen ClickHouse n
 
 La restauración normal conserva los contadores, series y lotes pendientes más recientes. Una recuperación de un archivo final sellado conserva exactamente el cupo registrado. Si se pierde el servidor y solo existe un backup periódico, se bloquea conservadoramente el cupo del período activo hasta conciliación; podría existir consumo aceptado después del backup. La retención usa la fecha original de la telemetría y se vuelve a materializar al restaurar.
 
-Se conservan dos backups periódicos por cliente; los backups operativos adicionales expiran a los 30 días. Los archivos finales tienen el plazo administrado por Automations. Hay que mantener disponibles controlador, driver, KMS e imágenes durante ese plazo. La copia previa a una restauración queda local para permitir investigación y requiere limpieza controlada del operador.
+Se conservan dos backups periódicos por cliente; los backups operativos adicionales expiran a los 30 días. Los archivos finales tienen el plazo administrado por Automations. El controlador registra también el inventario operativo en DynamoDB; el coordinador puede purgar sus versiones vencidas aunque el host se haya retirado. KMS, S3, imágenes y driver permanecen disponibles para la recuperación. Una copia local de restauración incompleta bloquea la retirada hasta su inspección.
 
 ## Actualizaciones y crecimiento
 
 App y colector tienen digests por cliente. UPDATE toma backup, despliega y migra ese cliente durante `verify`, comprueba salud y luego permite activar la ruta. Los digests de ClickHouse/Keeper compartidos no pueden cambiar mediante UPDATE de una suscripción. Un fallo de recuperación o migración deja el cliente detenido para inspección.
 
-Esta versión no crea nuevos hosts ni redistribuye shards. Al cuarto cliente se cierran las reservas; el quinto no cobra mediante un checkout válido. Para crecer se necesita ampliar el asignador a varios hosts, probar migración entre ellos y presupuestar redundancia. La actualización del controlador o del motor compartido requiere una ventana de mantenimiento con los cuatro clientes considerados.
+El quinto cliente crea otro grupo de hasta cuatro. Se reutilizan cupos libres y se retiran grupos vacíos; no se mueven clientes activos entre hosts para compactar capacidad. El último ARCHIVE/DELETE inicia la retirada, y un evento cada cinco minutos avanza sus pasos. RETIRING bloquea nuevas asignaciones; un contador cero necesita además una prueba del controlador sobre bases, Docker volumes y backups pendientes. CloudFormation elimina la máquina, el root efímero y el attachment. El driver borra el EBS de datos retenido solo después de confirmar identidad, tags y ausencia de attachments, y comprueba su desaparición antes de marcar RETIRED.
+
+Una creación AWS con resultado desconocido o un host averiado se conserva como estado pendiente para inspección; no autoriza borrar datos. El disco legado importado en la foundation no pertenece a ningún grupo nuevo y queda fuera de este retiro automático. El costo de cada host nuevo se suma al escenario; COP 450.000 sigue siendo el techo del escenario inicial, no un techo global demostrado para varios hosts. La actualización del controlador o del motor compartido exige considerar todos los clientes del host revisado.
