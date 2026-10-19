@@ -28,11 +28,14 @@ def validate(controller, request):
             or reviewed['pilot'] != request['subscription']['id']):
         raise RuntimeFailure('Maintenance targets another host or pilot')
     procedure = reviewed['procedure']
-    if (procedure.get('adapter') != 'signoz-host-v1' or procedure.get('unitKind') != 'host'
-            or procedure.get('storageCompatibility') != 'no-schema-change'
+    v2 = procedure.get('adapter') == 'signoz-host-v2'
+    if (procedure.get('adapter') not in {'signoz-host-v1', 'signoz-host-v2'} or procedure.get('unitKind') != 'host'
+            or procedure.get('storageCompatibility') != ('verified-restore' if v2 else 'no-schema-change')
             or not procedure.get('compatibilityEvidence')
             or not set(procedure.get('components', [])) <= {'controller', 'clickhouse', 'keeper'}):
         raise RuntimeFailure('Unsupported shared transition; implement and review its migration adapter')
+    if v2 and (procedure.get('components') != ['controller'] or request['release']['version'] != '0.3.0'):
+        raise RuntimeFailure('Verified restore only supports the reviewed 0.3.0 controller transition')
     gate = controller.core.get_item(Key={'pk': 'CAPACITY#abera-signoz#MAINTENANCE', 'sk': 'LOCK'}, ConsistentRead=True).get('Item', {})
     if gate.get('operationId') != request['operation']['id'] or gate.get('unit') != reviewed['unit']:
         raise RuntimeFailure('Shared maintenance no longer owns the admission gate')
@@ -65,6 +68,9 @@ def checkpoint(controller, request):
 
 def prepare(controller, request):
     reviewed = validate(controller, request)
+    if reviewed['procedure']['adapter'] == 'signoz-host-v2':
+        from .upgrade import prepare
+        return prepare(controller, request)
     path, progress = checkpoint(controller, request)
     if progress['stage'] != 'reviewed':
         return progress
@@ -116,8 +122,38 @@ def prepare(controller, request):
     return progress
 
 
+def ensure_controller(controller, request, path, reviewed):
+    images = request['release']['imageUris']
+    target_admin = images['admin']
+    running_admin = command(['docker', 'inspect', '--format', '{{.Config.Image}}', 'abera-controller']).strip()
+    if running_admin != target_admin:
+        if 'controller' not in reviewed['procedure']['components']:
+            raise RuntimeFailure('Release changes an undeclared controller')
+        # A durable helper replaces the controller. The new controller resumes
+        # this same queued hook, so the core never accepts an unobserved restart.
+        helper = 'abera-controller-upgrade-' + path.stem[:12]
+        exists = subprocess.run(['docker', 'inspect', helper], capture_output=True, text=True, timeout=30).returncode == 0
+        if not exists:
+            command(['docker', 'run', '-d', '--name', helper, '--network', 'host',
+                '-v', '/var/run/docker.sock:/var/run/docker.sock', '-v', '/opt/abera:/opt/abera',
+                '--entrypoint', 'python3', target_admin, '-m', 'abera.runtime.controller_update', target_admin, path.stem])
+        else:
+            state = command(['docker', 'inspect', '--format', '{{.Config.Image}}|{{.State.Running}}', helper]).strip()
+            if state not in {target_admin + '|true', target_admin + '|false'}:
+                raise RuntimeFailure('Controller replacement helper identity changed')
+            if state.endswith('|false'):
+                # Its durable replacement journal survives a helper exit; the
+                # same helper must resume it instead of leaving the job pending.
+                command(['docker', 'start', helper])
+        return False
+    return True
+
+
 def verify(controller, request):
     reviewed = validate(controller, request)
+    if reviewed['procedure']['adapter'] == 'signoz-host-v2':
+        from .upgrade import verify
+        return verify(controller, request)
     path, progress = checkpoint(controller, request)
     if progress['stage'] == 'reviewed':
         raise RuntimeFailure('Shared maintenance has not completed backups')
@@ -134,19 +170,7 @@ def verify(controller, request):
         controller.host.compose('up', '-d', '--wait', '--wait-timeout', '180', 'keeper', 'clickhouse')
         progress['stage'] = 'storage-updated'
         write_json(path, progress)
-    target_admin = images['admin']
-    running_admin = command(['docker', 'inspect', '--format', '{{.Config.Image}}', 'abera-controller']).strip()
-    if running_admin != target_admin:
-        if 'controller' not in reviewed['procedure']['components']:
-            raise RuntimeFailure('Release changes an undeclared controller')
-        # A durable helper replaces the controller. The new controller resumes
-        # this same queued hook, so the core never accepts an unobserved restart.
-        helper = 'abera-controller-upgrade-' + path.stem[:12]
-        exists = subprocess.run(['docker', 'inspect', helper], capture_output=True, text=True).returncode == 0
-        if not exists:
-            command(['docker', 'run', '-d', '--name', helper, '--network', 'host',
-                '-v', '/var/run/docker.sock:/var/run/docker.sock', '-v', '/opt/abera:/opt/abera',
-                '--entrypoint', 'python3', target_admin, '-m', 'abera.runtime.controller_update', target_admin, path.stem])
+    if not ensure_controller(controller, request, path, reviewed):
         return None
     for tenant in controller.host.state['tenants']:
         if tenant['state'] == 'ACTIVE': start(controller.host, tenant)
@@ -159,5 +183,5 @@ def verify(controller, request):
     write_json(path, progress)
     return {'unit': reviewed['unit'], 'members': sorted(progress['backups']), 'verified': True,
             'backupVersions': {sid: value['manifestVersionId'] for sid, value in progress['backups'].items()},
-            'sharedStorage': progress['sharedStorage'], 'controllerImage': target_admin,
+            'sharedStorage': progress['sharedStorage'], 'controllerImage': images['admin'],
             'clickhouseImage': controller.host.state['clickhouseImage'], 'keeperImage': controller.host.state['keeperImage']}

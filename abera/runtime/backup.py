@@ -138,6 +138,9 @@ def capture(host, subscription_id, backup_id, *, resume=True):
     if not BACKUP_ID.fullmatch(backup_id):
         raise ValueError("invalid backup id")
     tenant = tenant_for(host, subscription_id)
+    version = tenant.get("productVersion")
+    if not version and not host.state.get("local", True):
+        raise RuntimeFailure("managed backup requires the installed tenant product version")
     target = host.root / "backups" / subscription_id / backup_id
     if (target / "manifest.json").exists():
         verify_files(target, tenant)
@@ -176,7 +179,7 @@ def capture(host, subscription_id, backup_id, *, resume=True):
                  for name in ("database.zip", "files.tar.gz", "application-secrets.json")}
         receipt = {"schemaVersion": 1, "backupId": backup_id, "subscriptionId": subscription_id,
                    "namespace": tenant["namespace"], "generation": tenant["generation"], "capturedAt": int(started),
-                   "productVersion": tenant.get("productVersion", read_json(ABERA / "release.json")["version"]), "compatibilityGeneration": "signoz-0.1",
+                   "productVersion": version or read_json(ABERA / "release.json")["version"], "compatibilityGeneration": "signoz-0.1",
                    "verified": True, "sealed": not resume, "databases": present, "restoredTables": restored_tables, "seconds": int(time.time()-started), "files": files}
         write_json(target / "manifest.json", receipt)
         verify_files(target, tenant)
@@ -226,14 +229,14 @@ def merge_ledger(restored, current, tenant, *, sealed=False):
         db.execute("PRAGMA wal_checkpoint(TRUNCATE)")
 
 
-def restore(host, subscription_id, directory, *, cold=False, resume=True):
+def restore(host, subscription_id, directory, *, cold=False, resume=True, preserve_current=True):
     tenant = tenant_for(host, subscription_id)
     directory = Path(directory).resolve()
     receipt = verify_files(directory, tenant)
     if not receipt.get("databases") or not set(receipt["databases"]) <= set(databases(tenant)):
         raise RuntimeFailure("backup contains foreign databases")
     # Preserve a verifiable rollback point before touching any existing data.
-    if not cold:
+    if not cold and preserve_current:
         capture(host, subscription_id, "before-restore-" + receipt["backupId"], resume=False)
     else:
         stop(host, tenant)

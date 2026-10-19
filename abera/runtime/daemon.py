@@ -195,6 +195,7 @@ class Controller:
         return result
 
     def execute(self, request):
+        from . import upgrade
         sub = self.fence(request)
         if not self.host.state.get("local"):
             self.refresh_registry()
@@ -202,6 +203,31 @@ class Controller:
         operation, hook = request["operation"]["type"].upper(), request["hook"]
         configuration = request["subscription"]["configuration"]
         result = {"status": "DONE"}
+        schema_upgrade = operation == 'UPDATE' and upgrade.requested(request)
+        if (operation == 'UPDATE' and request['release']['version'] == '0.3.0'
+                and request['operation'].get('fromVersion', '').startswith('0.2.') and not schema_upgrade):
+            raise RuntimeFailure('SQLite transition requires reviewed signoz-host-v2 verified restore')
+        if schema_upgrade:
+            if hook == 'prepare':
+                progress = upgrade.prepare(self, request)
+                receipt = progress['backups'][sid]
+                result['metadata'] = {'lastBackupKey': receipt['manifestKey'], 'lastBackupVersionId': receipt['manifestVersionId'],
+                                      'lastBackupAt': receipt['capturedAt']}
+            elif hook == 'verify':
+                receipt = upgrade.verify(self, request)
+                if receipt is None:
+                    return {'status': 'IN_PROGRESS'}
+                result['metadata'] = {'maintenanceResult': receipt}
+            elif hook == 'finalize':
+                upgrade.finalize(self, request)
+            elif hook == 'compensate':
+                if request.get('context', {}).get('abortTasksOnly'):
+                    lifecycle.set_state(self.host, sid, 'SUSPENDED')
+                    return result
+                result['metadata'] = {'verifiedSourceRecovery': upgrade.compensate(self, request)}
+            else:
+                raise RuntimeFailure('Unsupported verified-restore hook')
+            return result
         if hook == "prepare":
             if operation == "CREATE":
                 images = lifecycle.release_images(self.host, request["release"])

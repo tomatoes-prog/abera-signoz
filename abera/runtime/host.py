@@ -64,7 +64,7 @@ class Host:
         state = self.state
         return render(self.root, state, local=state.get("local", True), pin_cpu=state.get("pinCPU", False))
 
-    def up(self, subscription_id=None):
+    def up(self, subscription_id=None, *, ingress=True):
         self.render()
         self.compose("up", "-d", "--wait", "--wait-timeout", "180", "keeper", "clickhouse")
         self.sql("SYSTEM RELOAD CONFIG")
@@ -89,7 +89,10 @@ class Host:
                     time.sleep(2)
             self.apply_retention(tenant)
             self.bootstrap(tenant["subscriptionId"])
-            self.compose("up", "-d", f"gateway-{slot}")
+            if ingress:
+                self.compose("up", "-d", f"gateway-{slot}")
+            else:
+                self.compose("up", "--no-start", "--no-deps", f"gateway-{slot}")
             self.observe()
 
     def bootstrap(self, subscription_id: str):
