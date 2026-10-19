@@ -61,8 +61,8 @@ import (
 )
 
 const (
-	primaryNamespace = "clickhouse"
-	archiveNamespace = "clickhouse-archive"
+	primaryNamespace          = "clickhouse"
+	archiveNamespace          = "clickhouse-archive"
 	signozDurationMVTable     = "distributed_durationSort"
 	signozUsageExplorerTable  = "distributed_usage_explorer"
 	signozSpansTable          = "distributed_signoz_spans"
