@@ -2,6 +2,10 @@
 
 ## Estado inicial seguro
 
+Para la candidata **0.3.0**, seguir [ACCEPTANCE_DEV.md](ACCEPTANCE_DEV.md) y el contrato `UPGRADE-0.3.0.md` de Automations. Publicar primero el puente 0.2.4 que conserva las imágenes de aplicación y almacenamiento del default DEV revisado, y después 0.3.0. Las migraciones SQLite 133–135 exigen restaurar datos e imágenes fuente ante un fallo; una imagen anterior por sí sola no revierte la migración 135.
+
+La evidencia histórica del 10 de octubre documenta Lite activo en DEV a COP 89.900/31 días, admisiones abiertas y default 0.2.0, con aceptación del runtime pendiente. Refrescar esos datos por API antes de aplicar una revisión. Los párrafos y comandos de la entrega 0.1.0 que aparecen más abajo se conservan como historial; no describen una nueva activación del catálogo ni autorizan encender un host precreado.
+
 **0.2.0 cambia el ciclo de capacidad.** Seguir [ON_DEMAND_HOSTS.md](ON_DEMAND_HOSTS.md): mantener `EnablePilot=false`, publicar la release revisada y crear los hosts desde las suscripciones de Billing. Los pasos de activación de host único y rechazo del quinto cliente que se conservan más abajo documentan la entrega de 0.1.0; no deben ejecutarse para 0.2.0. El disco legado recuperado permanece protegido. La aceptación de AWS del recorrido nuevo está pendiente.
 
 Las plantillas solo admiten `Environment=dev`. `EnablePilot=false` evita crear la máquina; `EnableAdmissions=false` cierra nuevas reservas. El manifiesto técnico tiene `provisioningEnabled: false`. Producto, planes y ofertas de Billing están retirados y no permiten checkout. Pro no tiene oferta ni configuración técnica desplegable.

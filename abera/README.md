@@ -1,8 +1,8 @@
-# Abera SigNoz 0.2.0 · servidores compartidos bajo demanda en DEV
+# Abera SigNoz 0.3.0 · candidata DEV sobre Community v0.146.0
 
 Automations asigna **hasta cuatro clientes por servidor**. Cuando Billing solicita crear una suscripción pagada, se reutiliza un cupo compatible o se crea otro servidor con su disco. Al archivar o eliminar el último cliente, el controlador verifica que no quedan bases ni volúmenes de aplicaciones y Automations retira el servidor y su disco. Cada cliente conserva su aplicación Community, SQLite, colector, gateway, credenciales y bases de telemetría; ClickHouse y Keeper se comparten dentro de su grupo.
 
-**Estado de 0.2.0:** cambios y pruebas locales; publicación y aceptación AWS pendientes. Esta versión conserva los precios aprobados y Pro aplazado. La foundation de 0.1.0 y su disco recuperado se preservan durante la transición. Un servidor permite recuperación, pero no ofrece alta disponibilidad ante una caída de la máquina o la zona.
+**Estado:** candidata de actualización con la corrección upstream del historial de alertas y recuperación de las migraciones SQLite 133–135. La evidencia del 10 de octubre acredita el catálogo Lite DEV habilitado y declara `runtimeAcceptanceVerified=false`; no acredita aceptación del runtime. La actualización de instalaciones pasa por el controlador puente 0.2.4 antes de 0.3.0. Seguir la [aceptación operativa corta](ACCEPTANCE_DEV.md). Un servidor permite recuperación, pero no ofrece alta disponibilidad ante una caída de la máquina o la zona.
 
 ## Planes propuestos
 
