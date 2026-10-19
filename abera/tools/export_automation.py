@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def export(automation):
+def export(automation, kinds=None):
     product = Path(automation).resolve() / "products" / "abera-signoz"
     if not (product / "product.yaml").is_file():
         raise ValueError("target is not the Abera SigNoz product directory")
@@ -24,7 +24,10 @@ def export(automation):
         if source.is_file() and not source.is_symlink():
             files.append(path)
     contexts = product / "image-build"
-    for kind in ("app", "collector", "clickhouse", "admin"):
+    kinds = tuple(dict.fromkeys(kinds or ("app", "collector", "clickhouse", "admin")))
+    if not set(kinds) <= {"app", "collector", "clickhouse", "admin"}:
+        raise ValueError("unsupported build context")
+    for kind in kinds:
         directory = contexts / kind
         resolved = directory.resolve()
         if resolved.parent != contexts.resolve() or not resolved.is_relative_to(product):
@@ -57,4 +60,6 @@ def export(automation):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--automations", type=Path, required=True)
-    export(parser.parse_args().automations)
+    parser.add_argument("--kinds", nargs="+", choices=("app", "collector", "clickhouse", "admin"))
+    args = parser.parse_args()
+    export(args.automations, args.kinds)

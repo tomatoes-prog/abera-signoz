@@ -92,3 +92,31 @@ def test_storage_update_requires_completed_backups(setup):
     controller,request,_=setup
     with pytest.raises(RuntimeFailure,match='backups'): m.verify(controller,request)
     assert controller.host.state['clickhouseImage'].startswith('old')
+
+
+@pytest.mark.parametrize('running', [True, False])
+def test_controller_helper_resumes_its_checkpoint_after_exit(setup, monkeypatch, running):
+    controller, request, _ = setup
+    path, _ = m.checkpoint(controller, request)
+    helper = 'abera-controller-upgrade-' + path.stem[:12]
+    commands = []
+    def command(args, **kw):
+        commands.append(args)
+        if args[-1] == 'abera-controller':
+            return 'previous-controller'
+        if args[1] == 'inspect':
+            return request['release']['imageUris']['admin'] + ('|true' if running else '|false')
+        return ''
+    monkeypatch.setattr(m, 'command', command)
+    monkeypatch.setattr(m.subprocess, 'run', lambda *a, **kw: SimpleNamespace(returncode=0))
+    assert not m.ensure_controller(controller, request, path, request['context']['maintenanceReview'])
+    assert (['docker', 'start', helper] in commands) is (not running)
+
+
+def test_controller_helper_with_another_image_is_not_restarted(setup, monkeypatch):
+    controller, request, _ = setup
+    path, _ = m.checkpoint(controller, request)
+    monkeypatch.setattr(m, 'command', lambda args, **kw: 'foreign-controller|false')
+    monkeypatch.setattr(m.subprocess, 'run', lambda *a, **kw: SimpleNamespace(returncode=0))
+    with pytest.raises(RuntimeFailure, match='identity changed'):
+        m.ensure_controller(controller, request, path, request['context']['maintenanceReview'])

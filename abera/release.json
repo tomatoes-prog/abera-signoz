@@ -1,11 +1,17 @@
 {
   "schemaVersion": 1,
   "productId": "abera-signoz",
-  "version": "0.1.0",
-  "upstreamCommit": "0aeef0dc46daf507778c95cbcb35b8791f94457b",
+  "version": "0.3.0",
+  "upstreamVersion": "v0.146.0",
+  "upstreamCommit": "da556abac1fd41590811b8e0dcbcbdea242dd285",
+  "upstreamSecurityCommits": [
+    "c2dd94f1905a6c5d2fd75f9b796bc4fcd31fa031"
+  ],
+  "maintenanceAdapters": ["signoz-host-v1", "signoz-host-v2"],
+  "offlineMaintenance": ["ARCHIVE", "PURGE"],
   "edition": "community",
   "maxCustomersPerHost": 4,
-  "maxHosts": 1,
+  "hostAllocation": "on-demand",
   "productionEnabled": false,
   "images": {
     "clickhouse": "clickhouse/clickhouse-server:25.12.5@sha256:cacf32d6884291dc2ff5e0156a97f46fc53ff7c929a7906d114e268a929dfd3a",
